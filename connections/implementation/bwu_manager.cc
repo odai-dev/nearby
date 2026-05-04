@@ -62,6 +62,7 @@ namespace connections {
 
 namespace {
 using ::location::nearby::connections::BandwidthUpgradeNegotiationFrame;
+using ::location::nearby::connections::BandwidthUpgradeRetryFrame;
 using ::location::nearby::connections::MediumRole;
 using ::location::nearby::connections::OfflineFrame;
 using ::location::nearby::connections::OsInfo;
@@ -123,6 +124,8 @@ BwuManager::BwuManager(
   // Register the offline frame processor.
   endpoint_manager_->RegisterFrameProcessor(
       V1Frame::BANDWIDTH_UPGRADE_NEGOTIATION, this);
+  endpoint_manager_->RegisterFrameProcessor(V1Frame::BANDWIDTH_UPGRADE_RETRY,
+                                            this);
 }
 
 BwuManager::~BwuManager() {
@@ -181,6 +184,8 @@ void BwuManager::Shutdown() {
 
   endpoint_manager_->UnregisterFrameProcessor(
       V1Frame::BANDWIDTH_UPGRADE_NEGOTIATION, this);
+  endpoint_manager_->UnregisterFrameProcessor(V1Frame::BANDWIDTH_UPGRADE_RETRY,
+                                              this);
 
   // Stop all the ongoing Runnables (as gracefully as possible).
   ShutdownExecutors();
@@ -404,26 +409,60 @@ void BwuManager::OnIncomingFrame(OfflineFrame& frame,
                                  ClientProxy* client, Medium medium,
                                  PacketMetaData& packet_meta_data) {
   V1Frame::FrameType frame_type = parser::GetFrameType(frame);
-  if (frame_type != V1Frame::BANDWIDTH_UPGRADE_NEGOTIATION) return;
+  if (frame_type != V1Frame::BANDWIDTH_UPGRADE_NEGOTIATION &&
+      frame_type != V1Frame::BANDWIDTH_UPGRADE_RETRY) {
+    return;
+  }
 
-  auto bwu_frame = frame.v1().bandwidth_upgrade_negotiation();
-  LOG(INFO) << "OnIncomingFrame: bwu_frame="
-            << BandwidthUpgradeNegotiationFrame::EventType_Name(
-                   bwu_frame.event_type())
-            << ", endpoint_id=" << endpoint_id << ", medium="
-            << location::nearby::proto::connections::Medium_Name(medium);
+  if (frame_type == V1Frame::BANDWIDTH_UPGRADE_NEGOTIATION) {
+    auto bwu_frame = frame.v1().bandwidth_upgrade_negotiation();
+    LOG(INFO) << "OnIncomingFrame: bwu_frame="
+              << BandwidthUpgradeNegotiationFrame::EventType_Name(
+                     bwu_frame.event_type())
+              << ", endpoint_id=" << endpoint_id << ", medium="
+              << location::nearby::proto::connections::Medium_Name(medium);
+    if (FeatureFlags::GetInstance().GetFlags().enable_async_bandwidth_upgrade) {
+      RunOnBwuManagerThread(
+          "bwu-on-incoming-frame", [this, client, endpoint_id, bwu_frame]() {
+            OnBwuNegotiationFrame(client, bwu_frame, endpoint_id);
+          });
+    } else {
+      CountDownLatch latch(1);
+      RunOnBwuManagerThread("bwu-on-incoming-frame",
+                            [this, client, endpoint_id, bwu_frame, &latch]() {
+                              OnBwuNegotiationFrame(client, bwu_frame,
+                                                    endpoint_id);
+                              latch.CountDown();
+                            });
+      latch.Await();
+    }
+    return;
+  }
+
+  if (!frame.v1().has_bandwidth_upgrade_retry()) {
+    LOG(WARNING) << "OnIncomingFrame: missing BWU retry payload for endpoint "
+                 << endpoint_id << ", ignoring frame.";
+    return;
+  }
+  auto retry_frame = frame.v1().bandwidth_upgrade_retry();
+  LOG(INFO) << "OnIncomingFrame: bwu_retry_frame endpoint_id=" << endpoint_id
+            << ", medium="
+            << location::nearby::proto::connections::Medium_Name(medium)
+            << ", is_request=" << retry_frame.is_request()
+            << ", supported_medium_count=" << retry_frame.supported_medium_size();
   if (FeatureFlags::GetInstance().GetFlags().enable_async_bandwidth_upgrade) {
     RunOnBwuManagerThread(
-        "bwu-on-incoming-frame", [this, client, endpoint_id, bwu_frame]() {
-          OnBwuNegotiationFrame(client, bwu_frame, endpoint_id);
+        "bwu-on-incoming-retry-frame",
+        [this, client, endpoint_id, retry_frame]() {
+          OnBwuRetryFrame(client, retry_frame, endpoint_id);
         });
   } else {
     CountDownLatch latch(1);
-    RunOnBwuManagerThread("bwu-on-incoming-frame", [this, client, endpoint_id,
-                                                    bwu_frame, &latch]() {
-      OnBwuNegotiationFrame(client, bwu_frame, endpoint_id);
-      latch.CountDown();
-    });
+    RunOnBwuManagerThread("bwu-on-incoming-retry-frame",
+                          [this, client, endpoint_id, retry_frame, &latch]() {
+                            OnBwuRetryFrame(client, retry_frame, endpoint_id);
+                            latch.CountDown();
+                          });
     latch.Await();
   }
 }
@@ -599,6 +638,52 @@ void BwuManager::OnBwuNegotiationFrame(
           << ", ignoring it.";
       break;
   }
+}
+
+void BwuManager::OnBwuRetryFrame(ClientProxy* client,
+                                 const BandwidthUpgradeRetryFrame& frame,
+                                 const std::string& endpoint_id) {
+  LOG(INFO) << "OnBwuRetryFrame: processing incoming frame for endpoint "
+            << endpoint_id << ", is_request=" << frame.is_request()
+            << ", supported_medium_count=" << frame.supported_medium_size();
+
+  if (!client->IsConnectedToEndpoint(endpoint_id)) {
+    LOG(WARNING) << "BwuManager skips BANDWIDTH_UPGRADE_RETRY before PCP "
+                    "connected for endpoint "
+                 << endpoint_id;
+    return;
+  }
+
+  if (frame.is_request()) {
+    std::vector<Medium> local_mediums = StripOutUnavailableMediums(
+        client->GetUpgradeMediums(endpoint_id).GetMediums(true));
+    std::shared_ptr<EndpointChannel> channel =
+        channel_manager_->GetChannelForEndpoint(endpoint_id);
+    if (!channel) {
+      LOG(WARNING) << "BwuManager failed to respond to BWU retry request for "
+                   << endpoint_id
+                   << " because no active endpoint channel was found.";
+      return;
+    }
+    if (!channel->Write(parser::ForBwuRetry(local_mediums, /*is_request=*/false))
+             .Ok()) {
+      LOG(WARNING) << "BwuManager failed writing BWU retry response frame for "
+                   << endpoint_id << ".";
+    }
+    return;
+  }
+
+  std::vector<Medium> remote_mediums = parser::BwuRetryMediumsToMediums(frame);
+  remote_mediums.erase(std::remove(remote_mediums.begin(), remote_mediums.end(),
+                                   Medium::UNKNOWN_MEDIUM),
+                       remote_mediums.end());
+  if (remote_mediums.empty()) {
+    LOG(WARNING) << "BwuManager received BWU retry response with empty or "
+                    "unsupported medium list from "
+                 << endpoint_id << ".";
+    return;
+  }
+  TryNextBestUpgradeMediums(client, endpoint_id, std::move(remote_mediums));
 }
 
 void BwuManager::OnIncomingConnection(
@@ -1466,32 +1551,7 @@ std::vector<Medium> BwuManager::StripOutUnavailableMediums(
     const std::vector<Medium>& mediums) const {
   std::vector<Medium> available_mediums;
   for (Medium m : mediums) {
-    bool available = false;
-    if (GetHandlerForMedium(m)) {
-      switch (m) {
-        case Medium::AWDL:
-          available = mediums_->GetAwdl().IsAvailable();
-          break;
-        case Medium::WIFI_LAN:
-          available = mediums_->GetWifiLan().IsAvailable();
-          break;
-        case Medium::WIFI_DIRECT:
-          available = mediums_->GetWifiDirect().IsGOAvailable();
-          break;
-        case Medium::WIFI_HOTSPOT:
-          available = mediums_->GetWifiHotspot().IsAPAvailable();
-          break;
-        case Medium::WEB_RTC:
-          available = mediums_->GetWebRtc().IsAvailable();
-          break;
-        case Medium::BLUETOOTH:
-          available = mediums_->GetBluetoothClassic().IsAvailable();
-          break;
-        default:
-          break;
-      }
-    }
-    if (available) {
+    if (GetHandlerForMedium(m) && IsMediumAvailable(m)) {
       available_mediums.push_back(m);
     }
   }
@@ -1622,6 +1682,25 @@ bool BwuManager::NeedToSwitchRole(
 const location::nearby::connections::OsInfo& BwuManager::GetLocalOsInfo(
     ClientProxy* client) const {
   return client->GetLocalOsInfo();
+}
+
+bool BwuManager::IsMediumAvailable(Medium medium) const {
+  switch (medium) {
+    case Medium::AWDL:
+      return mediums_->GetAwdl().IsAvailable();
+    case Medium::WIFI_LAN:
+      return mediums_->GetWifiLan().IsAvailable();
+    case Medium::WIFI_DIRECT:
+      return mediums_->GetWifiDirect().IsGOAvailable();
+    case Medium::WIFI_HOTSPOT:
+      return mediums_->GetWifiHotspot().IsAPAvailable();
+    case Medium::WEB_RTC:
+      return mediums_->GetWebRtc().IsAvailable();
+    case Medium::BLUETOOTH:
+      return mediums_->GetBluetoothClassic().IsAvailable();
+    default:
+      return false;
+  }
 }
 
 absl::Duration BwuManager::CalculateNextRetryDelay(

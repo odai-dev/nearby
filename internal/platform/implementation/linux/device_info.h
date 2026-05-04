@@ -15,6 +15,7 @@
 #ifndef PLATFORM_IMPL_LINUX_DEVICE_INFO_H_
 #define PLATFORM_IMPL_LINUX_DEVICE_INFO_H_
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -37,16 +38,15 @@ namespace linux {
 class CurrentUserSession final
     : public sdbus::ProxyInterfaces<org::freedesktop::login1::Session_proxy> {
  public:
-  CurrentUserSession(const CurrentUserSession &) = delete;
-  CurrentUserSession(CurrentUserSession &&) = delete;
-  CurrentUserSession &operator=(const CurrentUserSession &) = delete;
-  CurrentUserSession &operator=(CurrentUserSession &&) = delete;
-  ~CurrentUserSession() { unregisterProxy(); }
-  explicit CurrentUserSession(sdbus::IConnection &system_bus)
+  CurrentUserSession(const CurrentUserSession&) = delete;
+  CurrentUserSession(CurrentUserSession&&) = delete;
+  CurrentUserSession& operator=(const CurrentUserSession&) = delete;
+  CurrentUserSession& operator=(CurrentUserSession&&) = delete;
+  ~CurrentUserSession() = default;
+  explicit CurrentUserSession(sdbus::IConnection& system_bus,
+                              const std::string& session_path)
       : ProxyInterfaces(system_bus, sdbus::ServiceName("org.freedesktop.login1"),
-                        sdbus::ObjectPath("/org/freedesktop/login1/session/auto")) {
-    registerProxy();
-  }
+                         sdbus::ObjectPath(session_path)) {}
 
   void RegisterScreenLockedListener(
       absl::string_view listener_name,
@@ -90,17 +90,17 @@ class Hostnamed
 class LoginManager final
     : public sdbus::ProxyInterfaces<org::freedesktop::login1::Manager_proxy> {
  public:
-  LoginManager(const LoginManager &) = delete;
-  LoginManager(LoginManager &&) = delete;
-  LoginManager &operator=(const LoginManager &) = delete;
-  LoginManager &operator=(LoginManager &&) = delete;
-  explicit LoginManager(sdbus::IConnection &system_bus)
+  LoginManager(const LoginManager&) = delete;
+  LoginManager(LoginManager&&) = delete;
+  LoginManager& operator=(const LoginManager&) = delete;
+  LoginManager& operator=(LoginManager&&) = delete;
+  explicit LoginManager(sdbus::IConnection& system_bus)
       : ProxyInterfaces(system_bus,
                         sdbus::ServiceName("org.freedesktop.login1"),
-                        sdbus::ObjectPath("/org/freedesktop/login1")) {
-    registerProxy();
-  }
-  ~LoginManager() { unregisterProxy(); }
+                        sdbus::ObjectPath("/org/freedesktop/login1")) {}
+  ~LoginManager() = default;
+
+  std::string GetCurrentSessionPath();
 
  protected:
   void onSessionNew(const std::string &session_id,
@@ -110,11 +110,11 @@ class LoginManager final
   void onUserNew(const uint32_t &uid,
                  const sdbus::ObjectPath &object_path) override {}
   void onUserRemoved(const uint32_t &uid,
-                     const sdbus::ObjectPath &object_path) override {}
+                      const sdbus::ObjectPath &object_path) override {}
   void onSeatNew(const std::string &seat_id,
                  const sdbus::ObjectPath &object_path) override {}
   void onSeatRemoved(const std::string &seat_id,
-                     const sdbus::ObjectPath &object_path) override {}
+                   const sdbus::ObjectPath &object_path) override {}
   void onPrepareForShutdown(const bool &start) override {}
   void onPrepareForSleep(const bool &start) override {}
 };
@@ -142,12 +142,16 @@ class DeviceInfo final : public api::DeviceInfo {
   void RegisterScreenLockedListener(
       absl::string_view listener_name,
       std::function<void(api::DeviceInfo::ScreenStatus)> callback) override {
-    current_user_session_->RegisterScreenLockedListener(listener_name,
-                                                        std::move(callback));
+    if (current_user_session_ != nullptr) {
+      current_user_session_->RegisterScreenLockedListener(listener_name,
+                                                          std::move(callback));
+    }
   }
   void UnregisterScreenLockedListener(
       absl::string_view listener_name) override {
-    current_user_session_->UnregisterScreenLockedListener(listener_name);
+    if (current_user_session_ != nullptr) {
+      current_user_session_->UnregisterScreenLockedListener(listener_name);
+    }
   }
 
   bool PreventSleep() override;

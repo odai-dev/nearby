@@ -5,6 +5,52 @@ set -euo pipefail
 MODE="user"
 PREFIX=""
 
+missing_dependency() {
+  local name="$1"
+  local hint="$2"
+  echo "Missing required dependency: $name" >&2
+  echo "$hint" >&2
+  exit 1
+}
+
+check_command() {
+  local command_name="$1"
+  local hint="$2"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    missing_dependency "$command_name" "$hint"
+  fi
+}
+
+check_runtime_linkage() {
+  local binary="$1"
+  local description="$2"
+  if ! command -v ldd >/dev/null 2>&1; then
+    return
+  fi
+
+  local missing
+  missing="$(ldd "$binary" 2>/dev/null | grep 'not found' || true)"
+  if [[ -n "$missing" ]]; then
+    echo "Runtime dependencies for $description are missing:" >&2
+    echo "$missing" >&2
+    echo "Install the missing Qt 6 / qrencode / system libraries before rerunning the installer." >&2
+    exit 1
+  fi
+}
+
+check_service_hint() {
+  local unit="$1"
+  local description="$2"
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return
+  fi
+
+  if ! systemctl is-active --quiet "$unit"; then
+    echo "Warning: $description ($unit) is not active right now." >&2
+    echo "Nearby File Share needs it running for discovery and fast transfers." >&2
+  fi
+}
+
 usage() {
   cat <<'USAGE'
 Usage: ./install_nearby_file_share.sh [options]
@@ -70,6 +116,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BIN_SRC="$SCRIPT_DIR/bin/nearby_qml_file_tray_app"
 LIB_SRC="$SCRIPT_DIR/lib/libnearby_sharing_api_shared.so"
+SDBUS_LIB_SRC="$SCRIPT_DIR/lib/libsdbus-c++.so.2"
 DESKTOP_SRC="$SCRIPT_DIR/share/applications/nearby-file-share.desktop"
 ICON_SRC_STAGED="$SCRIPT_DIR/share/icons/hicolor/256x256/apps/nearby-file-share.png"
 ICON_SRC_FALLBACK="$SCRIPT_DIR/nearby-linux-desktop.png"
@@ -79,7 +126,7 @@ if [[ ! -f "$ICON_SRC" && -f "$ICON_SRC_FALLBACK" ]]; then
 fi
 HEADER_SRC="$SCRIPT_DIR/include/sharing/linux/nearby_sharing_api.h"
 
-for required in "$BIN_SRC" "$LIB_SRC" "$DESKTOP_SRC" "$ICON_SRC"; do
+for required in "$BIN_SRC" "$LIB_SRC" "$SDBUS_LIB_SRC" "$DESKTOP_SRC" "$ICON_SRC"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required bundle artifact: $required" >&2
     echo "Run this installer from the extracted release bundle root." >&2
@@ -111,6 +158,20 @@ if [[ "$NEEDS_ELEVATION" -eq 1 && "$(id -u)" -ne 0 ]]; then
   INSTALL_PREFIX=(sudo)
 fi
 
+check_command bluetoothctl \
+  "Install BlueZ tools first. On Pop!_OS/Ubuntu: sudo apt install bluez"
+check_command nmcli \
+  "Install NetworkManager first. On Pop!_OS/Ubuntu: sudo apt install network-manager"
+check_command avahi-browse \
+  "Install Avahi tools first. On Pop!_OS/Ubuntu: sudo apt install avahi-daemon avahi-utils"
+
+check_runtime_linkage "$BIN_SRC" "nearby_qml_file_tray_app"
+check_runtime_linkage "$LIB_SRC" "libnearby_sharing_api_shared.so"
+
+check_service_hint bluetooth "Bluetooth service"
+check_service_hint NetworkManager "NetworkManager"
+check_service_hint avahi-daemon "Avahi daemon"
+
 TMP_DESKTOP="$(mktemp)"
 trap 'rm -f "$TMP_DESKTOP"' EXIT
 
@@ -126,6 +187,7 @@ echo "[1/5] Installing application binary"
 echo "[2/5] Installing shared library"
 "${INSTALL_PREFIX[@]}" install -d "$LIBDIR"
 "${INSTALL_PREFIX[@]}" install -m 0755 "$LIB_SRC" "$LIBDIR/"
+"${INSTALL_PREFIX[@]}" install -m 0755 "$SDBUS_LIB_SRC" "$LIBDIR/"
 
 if [[ -f "$HEADER_SRC" ]]; then
   echo "[3/5] Installing public header"
@@ -152,6 +214,7 @@ fi
 echo "Installed Nearby File Share:"
 echo "  binary : $BINDIR/nearby_qml_file_tray_app"
 echo "  library: $LIBDIR/libnearby_sharing_api_shared.so"
+echo "  runtime: $LIBDIR/libsdbus-c++.so.2"
 echo "  desktop: $DESKTOP_DIR/nearby-file-share.desktop"
 echo "  icon   : $ICON_DIR/nearby-file-share.png"
 if [[ -f "$HEADER_SRC" ]]; then

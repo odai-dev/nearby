@@ -175,6 +175,8 @@ class NearbySharingServiceImpl
     alternate_service_uuid_ = alternate_service_uuid;
   }
 
+  std::optional<Medium> GetUpgradedMedium(int64_t share_target_id) const override;
+
   // NearbyConnectionsManager::IncomingConnectionListener:
   void OnIncomingConnection(absl::string_view endpoint_id,
                             absl::Span<const uint8_t> endpoint_info,

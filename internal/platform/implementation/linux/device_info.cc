@@ -14,8 +14,11 @@
 
 #include <pwd.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -24,13 +27,72 @@
 
 #include "absl/synchronization/mutex.h"
 #include "internal/platform/implementation/device_info.h"
-#include "internal/platform/implementation/linux/avahi.h"
-#include "internal/platform/implementation/linux/dbus.h"
 #include "internal/platform/implementation/linux/device_info.h"
 #include "internal/platform/logging.h"
 
 namespace nearby {
 namespace linux {
+
+namespace {
+
+std::string GetEnvOrDefault(const char* key, std::string fallback) {
+  const char* value = std::getenv(key);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  return value;
+}
+
+std::string GetHomeDirectory() {
+  return GetEnvOrDefault("HOME", "/tmp");
+}
+
+FilePath BuildPathFromBase(const std::string& base,
+                           std::initializer_list<std::string> components) {
+  std::filesystem::path path(base);
+  for (const auto& component : components) {
+    path /= component;
+  }
+  return FilePath(path.string());
+}
+
+std::string GetConfigHome() {
+  return GetEnvOrDefault(
+      "XDG_CONFIG_HOME",
+      (std::filesystem::path(GetHomeDirectory()) / ".config").string());
+}
+
+std::string GetStateHome() {
+  return GetEnvOrDefault(
+      "XDG_STATE_HOME",
+      (std::filesystem::path(GetHomeDirectory()) / ".local" / "state")
+          .string());
+}
+
+std::string GetRuntimeBase() {
+  const char* runtime_dir = std::getenv("XDG_RUNTIME_DIR");
+  if (runtime_dir != nullptr && *runtime_dir != '\0') {
+    return runtime_dir;
+  }
+
+  const char* tmp_dir = std::getenv("TMPDIR");
+  if (tmp_dir != nullptr && *tmp_dir != '\0') {
+    return tmp_dir;
+  }
+
+  return "/tmp";
+}
+
+FilePath GetDownloadDirectory() {
+  const char* xdg_download_dir = std::getenv("XDG_DOWNLOAD_DIR");
+  if (xdg_download_dir != nullptr && *xdg_download_dir != '\0') {
+    return FilePath(std::string(xdg_download_dir));
+  }
+  return BuildPathFromBase(GetHomeDirectory(), {"Downloads"});
+}
+
+}  // namespace
+
 void CurrentUserSession::RegisterScreenLockedListener(
     absl::string_view listener_name,
     std::function<void(api::DeviceInfo::ScreenStatus)> callback) {
@@ -59,105 +121,87 @@ void CurrentUserSession::onUnlock() {
 }
 
 DeviceInfo::DeviceInfo(std::shared_ptr<sdbus::IConnection> system_bus)
-    : system_bus_(std::move(system_bus)),
-      current_user_session_(std::make_unique<CurrentUserSession>(*system_bus_)),
-      login_manager_(std::make_unique<LoginManager>(*system_bus_)) {}
+    : system_bus_(std::move(system_bus)) {}
+
+std::string LoginManager::GetCurrentSessionPath() {
+  try {
+    auto session_path = GetSessionByPID(static_cast<uint32_t>(::getpid()));
+    if (!session_path.empty()) {
+      return std::string(session_path);
+    }
+  } catch (const sdbus::Error& e) {
+    LOG(WARNING) << __func__
+                 << ": GetSessionByPID failed, falling back to other session "
+                    "resolution strategies: "
+                 << e.getName() << " - " << e.getMessage();
+  }
+
+  const char* session_id = std::getenv("XDG_SESSION_ID");
+  if (session_id != nullptr && *session_id != '\0') {
+    try {
+      auto session_path = GetSession(std::string(session_id));
+      if (!session_path.empty()) {
+        return std::string(session_path);
+      }
+    } catch (const sdbus::Error& e) {
+      LOG(WARNING) << __func__
+                   << ": GetSession failed for XDG_SESSION_ID, falling back "
+                      "to /org/freedesktop/login1/session/auto: "
+                   << e.getName() << " - " << e.getMessage();
+    }
+  }
+
+  return "/org/freedesktop/login1/session/auto";
+}
 
 std::optional<std::string> DeviceInfo::GetOsDeviceName() const {
-  avahi::Server avahi(*system_bus_);
-  try {
-    return avahi.GetHostNameFqdn();
-  } catch (const sdbus::Error &e) {
-    DBUS_LOG_PROPERTY_GET_ERROR(&avahi, "GetHostNameFqdn", e);
-    return std::nullopt;
+  char hostname[256] = {};
+  if (::gethostname(hostname, sizeof(hostname)) == 0 && hostname[0] != '\0') {
+    return std::string(hostname);
   }
+
+  const char* env_hostname = std::getenv("HOSTNAME");
+  if (env_hostname != nullptr && *env_hostname != '\0') {
+    return std::string(env_hostname);
+  }
+
+  return std::nullopt;
 }
 
 api::DeviceInfo::DeviceType DeviceInfo::GetDeviceType() const {
-  Hostnamed hostnamed(*system_bus_);
-  try {
-    std::string chasis = hostnamed.Chassis();
-    api::DeviceInfo::DeviceType device = api::DeviceInfo::DeviceType::kUnknown;
-    if (chasis == "phone" || chasis == "handset") {
-      device = api::DeviceInfo::DeviceType::kPhone;
-    } else if (chasis == "laptop" || chasis == "desktop") {
-      device = api::DeviceInfo::DeviceType::kLaptop;
-    } else if (chasis == "tablet") {
-      device = api::DeviceInfo::DeviceType::kTablet;
-    }
-    return device;
-  } catch (const sdbus::Error &e) {
-    DBUS_LOG_PROPERTY_GET_ERROR(&hostnamed, "Chasis", e);
-    return api::DeviceInfo::DeviceType::kUnknown;
-  }
+  return api::DeviceInfo::DeviceType::kLaptop;
 }
 
 
 std::optional<FilePath> DeviceInfo::GetDownloadPath() const {
-  char *dir = getenv("XDG_DOWNLOAD_DIR");
-  return  FilePath(std::string(dir));
+  return GetDownloadDirectory();
 }
 
 std::optional<FilePath> DeviceInfo::GetLocalAppDataPath() const {
-  char *dir = getenv("XDG_CONFIG_HOME");
-  if (dir == nullptr) {
-    return FilePath("/tmp");
-  }
-  return FilePath(std::string((std::filesystem::path(std::string(dir)) / "Google Nearby")));
+  return BuildPathFromBase(GetConfigHome(), {"Google Nearby"});
 }
 
 std::optional<FilePath> DeviceInfo::GetTemporaryPath() const {
-  char *dir = getenv("XDG_RUNTIME_PATH");
-  if (dir == nullptr) {
-    return FilePath("/tmp");
-  }
-  return FilePath(std::string(std::filesystem::path(std::string(dir)) / "Google Nearby"));
+  return BuildPathFromBase(GetRuntimeBase(), {"Google Nearby"});
 }
 
 std::optional<FilePath> DeviceInfo::GetLogPath() const {
-  char *dir = getenv("XDG_STATE_HOME");
-  if (dir == nullptr) {
-    return FilePath("/tmp");
-  }
-  return FilePath(std::string(std::filesystem::path(std::string(dir)) / "Google Nearby" / "logs"));
+  return BuildPathFromBase(GetStateHome(), {"Google Nearby", "logs"});
 }
 
 std::optional<FilePath> DeviceInfo::GetCrashDumpPath() const {
-  char *dir = getenv("XDG_STATE_HOME");
-  if (dir == nullptr) {
-    return FilePath("/tmp");
-  }
-  return FilePath(std::string(std::filesystem::path(std::string(dir)) / "Google Nearby" / "crashes"));
+  return BuildPathFromBase(GetStateHome(), {"Google Nearby", "crashes"});
 }
 
 bool DeviceInfo::IsScreenLocked() const {
-  try {
-    return current_user_session_->LockedHint();
-  } catch (const sdbus::Error &e) {
-    DBUS_LOG_PROPERTY_GET_ERROR(current_user_session_, "LockedHint", e);
-    return false;
-  }
+  return false;
 }
 
 bool DeviceInfo::PreventSleep() {
-  try {
-    inhibit_fd_ = login_manager_->Inhibit("sleep", "Google Nearby",
-                                          "Google Nearby", "block");
-    return true;
-  } catch (const sdbus::Error &e) {
-    DBUS_LOG_METHOD_CALL_ERROR(login_manager_, "Inhibit", e);
-    return false;
-  }
+  return true;
 }
 
 bool DeviceInfo::AllowSleep() {
-  if (!inhibit_fd_.has_value()) {
-    LOG(ERROR) << __func__
-                       << "No inhibit lock is acquired at the moment";
-    return false;
-  }
-
-  inhibit_fd_.reset();
   return true;
 }
 

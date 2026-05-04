@@ -65,11 +65,9 @@ class AgentManager final
 
   explicit AgentManager(sdbus::IConnection& system_bus)
       : ProxyInterfaces(system_bus, sdbus::ServiceName(bluez::SERVICE_DEST),
-        sdbus::ObjectPath("/org/bluez")) {
-    registerProxy();
-  }
+        sdbus::ObjectPath("/org/bluez")) {}
 
-  ~AgentManager() { unregisterProxy(); }
+  ~AgentManager() = default;
 
   bool Register(std::optional<absl::string_view> capability,
                 const sdbus::ObjectPath& agent_object_path);

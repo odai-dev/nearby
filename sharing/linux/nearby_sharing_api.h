@@ -75,10 +75,13 @@ class __attribute__((visibility("default"))) NearbySharingApi {
     TransferStatus status = TransferStatus::kUnknown;
     float progress = 0.0f;
     uint64_t transferred_bytes = 0;
+    uint64_t total_bytes = 0;
+    uint64_t transfer_speed = 0;
     int total_attachments = 0;
     int transferred_attachments = 0;
     std::string first_file_name;
     std::string first_file_path;
+    std::string connection_medium;
     std::vector<TextAttachmentInfo> text_attachments;
   };
 

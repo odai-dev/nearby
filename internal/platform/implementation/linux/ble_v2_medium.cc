@@ -112,10 +112,10 @@ void BleV2Medium::OnRegisterMonitorReply(std::optional<sdbus::Error> error) {
   }
 
   if (error.has_value() && error->isValid()) {
-    LOG(ERROR) << __func__ << ": Got error '" << error->getName()
-               << "' with message '" << error->getMessage()
-               << "' while calling RegisterMonitor on object "
-               << adv_monitor_manager_->getProxy().getObjectPath();
+    LOG(WARNING) << __func__ << ": Got error '" << error->getName()
+                 << "' with message '" << error->getMessage()
+                 << "' while calling RegisterMonitor on object "
+                 << adv_monitor_manager_->getProxy().getObjectPath();
   }
 
   adv_monitor_manager_ready_notification_.Notify();
@@ -535,7 +535,10 @@ bool BleV2Medium::IsExtendedAdvertisementsAvailable() {
     auto supported_channels = adv_manager_->SupportedSecondaryChannels();
     return !supported_channels.empty();
   } catch (const sdbus::Error &e) {
-    DBUS_LOG_PROPERTY_GET_ERROR(adv_manager_, "SupportedSecondaryChannels", e);
+    LOG(WARNING) << __func__
+                 << ": SupportedSecondaryChannels is unavailable on this "
+                    "BlueZ version, disabling extended advertisements: "
+                 << e.getName() << " - " << e.getMessage();
     return false;
   }
 }

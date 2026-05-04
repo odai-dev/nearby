@@ -2728,6 +2728,45 @@ TEST_F(BasePcpHandlerTest, IncomingConnectionWithNoDataFailsWithoutLogging) {
   env_.Stop();
 }
 
+TEST_F(BasePcpHandlerTest, IncomingConnectionWithNonRequestFrameIsIgnored) {
+  env_.Start();
+  Mediums m;
+  EndpointChannelManager ecm;
+  EndpointManager em(&ecm);
+  BwuManager bwu(m, em, ecm, {}, {});
+  MockPcpHandler pcp_handler(&m, &em, &ecm, &bwu);
+  v3::ConnectionListeningOptions options = {
+      .strategy = Strategy::kP2pCluster,
+      .enable_ble_listening = true,
+      .enable_bluetooth_listening = true,
+      .enable_wlan_listening = true,
+      .listening_endpoint_type = NearbyDevice::Type::kConnectionsDevice};
+  EXPECT_CALL(pcp_handler, StartListeningForIncomingConnectionsImpl)
+      .WillOnce(Return(
+          MockPcpHandler::StartOperationResult{.status = {Status::kSuccess}}));
+  EXPECT_CALL(pcp_handler, CanReceiveIncomingConnection)
+      .WillRepeatedly(Return(true));
+  EXPECT_TRUE(pcp_handler
+                  .StartListeningForIncomingConnections(client_.get(), "service",
+                                                        options, {})
+                  .first.Ok());
+  ASSERT_TRUE(client_->IsListeningForIncomingConnections());
+
+  auto channel_pair = SetupConnection(Medium::BLUETOOTH);
+  // The first write is intentionally dropped in SetupConnection.
+  channel_pair.first->Write(ByteArray());
+  channel_pair.first->Write(parser::ForKeepAlive());
+
+  EXPECT_TRUE(pcp_handler
+                  .OnIncomingConnection(
+                      client_.get(), ByteArray("remote endpoint"),
+                      std::move(channel_pair.second), Medium::BLUETOOTH,
+                      NearbyDevice::Type::kConnectionsDevice)
+                  .Ok());
+  EXPECT_FALSE(pcp_handler.HasIncomingConnections(client_.get()));
+  env_.Stop();
+}
+
 TEST_F(BasePcpHandlerTest, TestNeedsToTurnOffAdvertisingMedium) {
   Mediums m;
   EndpointChannelManager ecm;

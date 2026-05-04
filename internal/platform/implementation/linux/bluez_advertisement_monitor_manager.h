@@ -44,9 +44,7 @@ class AdvertisementMonitorManager final
       sdbus::IConnection &system_bus,
       const ::nearby::linux::BluetoothAdapter &adapter)
       : ProxyInterfaces(system_bus, sdbus::ServiceName("org.bluez"),
-                        adapter.GetObjectPath()) {
-    registerProxy();
-  }
+                        adapter.GetObjectPath()) {}
 
  public:
   AdvertisementMonitorManager(const AdvertisementMonitorManager &) = delete;
@@ -55,7 +53,7 @@ class AdvertisementMonitorManager final
       delete;
   AdvertisementMonitorManager &operator=(AdvertisementMonitorManager &&) =
       delete;
-  ~AdvertisementMonitorManager() { unregisterProxy(); }
+  ~AdvertisementMonitorManager() = default;
 
   void SetRegisterMonitorReplyCallback(ReplyCallback callback) {
     absl::MutexLock lock(&callbacks_mutex_);
@@ -90,7 +88,7 @@ class AdvertisementMonitorManager final
     if (objects[adapter.GetObjectPath()].count(
             sdbus::InterfaceName(org::bluez::AdvertisementMonitorManager1_proxy::INTERFACE_NAME)) ==
         0) {
-      LOG(ERROR)
+      LOG(WARNING)
           << __func__ << ": Adapter " << adapter.GetObjectPath()
           << " doesn't provide "
           << org::bluez::AdvertisementMonitorManager1_proxy::INTERFACE_NAME;

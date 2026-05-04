@@ -796,6 +796,28 @@ TEST(OfflineFramesTest, CanGenerateBwuPathRequest) {
   EXPECT_THAT(message, EqualsProto(kExpected));
 }
 
+TEST(OfflineFramesTest, CanGenerateBwuRetryRequest) {
+  constexpr absl::string_view kExpected =
+      R"pb(
+    version: V1
+    v1: <
+      type: BANDWIDTH_UPGRADE_RETRY
+      bandwidth_upgrade_retry: <
+        supported_medium: WIFI_LAN
+        supported_medium: WEB_RTC
+        is_request: true
+      >
+    >)pb";
+  std::vector<Medium> mediums = {Medium::WIFI_LAN, Medium::WEB_RTC};
+  ByteArray bytes = ForBwuRetry(mediums, /*is_request=*/true);
+  auto response = FromBytes(bytes);
+  ASSERT_TRUE(response.ok());
+  OfflineFrame message = response.result();
+  EXPECT_THAT(message, EqualsProto(kExpected));
+  EXPECT_EQ(BwuRetryMediumsToMediums(message.v1().bandwidth_upgrade_retry()),
+            mediums);
+}
+
 TEST(OfflineFramesTest, WFDAuthTypeToMediumMetadataWFDAuthType) {
   EXPECT_EQ(WFDAuthTypeToMediumMetadataWFDAuthType(
                 WifiDirectAuthType::WIFI_DIRECT_WITH_PASSWORD),

@@ -214,13 +214,23 @@ bool HasNonLoopbackInterface() {
   bool connected = false;
   for (struct ifaddrs* current = interfaces; current != nullptr;
        current = current->ifa_next) {
-    if (current->ifa_name == nullptr || current->ifa_flags == 0) {
+    if (current->ifa_name == nullptr || current->ifa_addr == nullptr) {
       continue;
     }
-    if ((current->ifa_flags & IFF_UP) == 0 ||
-        (current->ifa_flags & IFF_LOOPBACK) != 0) {
+    // Skip loopback
+    if ((current->ifa_flags & IFF_LOOPBACK) != 0) {
       continue;
     }
+    // Must be UP and RUNNING
+    if ((current->ifa_flags & (IFF_UP | IFF_RUNNING)) != (IFF_UP | IFF_RUNNING)) {
+      continue;
+    }
+    // Only consider IPv4 or IPv6 addresses
+    if (current->ifa_addr->sa_family != AF_INET &&
+        current->ifa_addr->sa_family != AF_INET6) {
+      continue;
+    }
+
     connected = true;
     break;
   }

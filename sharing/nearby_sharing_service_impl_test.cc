@@ -352,6 +352,18 @@ std::unique_ptr<Frame> GetCancelFrame() {
   return std::unique_ptr<Frame>(frame);
 }
 
+std::unique_ptr<Frame> GetProgressUpdateFrame() {
+  V1Frame* v1_frame = V1Frame::default_instance().New();
+  v1_frame->set_type(V1Frame::PROGRESS_UPDATE);
+  v1_frame->set_allocated_progress_update(
+      service::proto::ProgressUpdateFrame::default_instance().New());
+
+  Frame* frame = Frame::default_instance().New();
+  frame->set_version(Frame::V1);
+  frame->set_allocated_v1(v1_frame);
+  return std::unique_ptr<Frame>(frame);
+}
+
 std::unique_ptr<AttachmentContainer> CreateTextAttachments(
     std::vector<std::string> texts) {
   AttachmentContainer::Builder builder;
@@ -766,6 +778,13 @@ class NearbySharingServiceImplTest : public testing::Test {
 
   void SendCancel() {
     std::unique_ptr<Frame> frame = GetCancelFrame();
+    std::vector<uint8_t> bytes(frame->ByteSizeLong());
+    frame->SerializeToArray(bytes.data(), bytes.size());
+    ReceiveMessageFromConnection(std::move(bytes));
+  }
+
+  void SendProgressUpdate() {
+    std::unique_ptr<Frame> frame = GetProgressUpdateFrame();
     std::vector<uint8_t> bytes(frame->ByteSizeLong());
     frame->SerializeToArray(bytes.data(), bytes.size());
     ReceiveMessageFromConnection(std::move(bytes));
@@ -2903,6 +2922,68 @@ TEST_F(NearbySharingServiceImplTest, RejectValidShareTarget) {
   EXPECT_FALSE(
       fake_nearby_connections_manager_->connection_endpoint_info(kEndpointId)
           .has_value());
+}
+
+TEST_F(NearbySharingServiceImplTest,
+       IncomingCompatibilityResponseAcceptIsIgnored) {
+  NiceMock<MockTransferUpdateCallback> callback;
+  int64_t share_target_id = SetUpIncomingConnection(callback);
+  ScopedReceiveSurface r(service_.get(), &callback);
+
+  SendConnectionResponse(ConnectionResponseFrame::ACCEPT);
+  AcceptConnection(callback, share_target_id, kEndpointId);
+}
+
+TEST_F(NearbySharingServiceImplTest,
+       IncomingCompatibilityProgressUpdateIsIgnored) {
+  NiceMock<MockTransferUpdateCallback> callback;
+  int64_t share_target_id = SetUpIncomingConnection(callback);
+  ScopedReceiveSurface r(service_.get(), &callback);
+
+  SendProgressUpdate();
+  AcceptConnection(callback, share_target_id, kEndpointId);
+}
+
+TEST_F(NearbySharingServiceImplTest,
+       IncomingCompatibilityResponseRejectAbortsSession) {
+  NiceMock<MockTransferUpdateCallback> callback;
+  int64_t share_target_id = SetUpIncomingConnection(callback);
+  ScopedReceiveSurface r(service_.get(), &callback);
+
+  absl::Notification rejected_notification;
+  EXPECT_CALL(callback, OnTransferUpdate(testing::_, testing::_, testing::_))
+      .WillOnce([&](const ShareTarget& share_target,
+                    const AttachmentContainer& /*container*/,
+                    TransferMetadata metadata) {
+        EXPECT_EQ(share_target.id, share_target_id);
+        EXPECT_TRUE(metadata.is_final_status());
+        EXPECT_EQ(metadata.status(), TransferMetadata::Status::kRejected);
+        rejected_notification.Notify();
+      });
+  SendConnectionResponse(ConnectionResponseFrame::REJECT);
+  EXPECT_TRUE(
+      rejected_notification.WaitForNotificationWithTimeout(kWaitTimeout));
+}
+
+TEST_F(NearbySharingServiceImplTest,
+       IncomingCompatibilityResponseTimedOutAbortsSession) {
+  NiceMock<MockTransferUpdateCallback> callback;
+  int64_t share_target_id = SetUpIncomingConnection(callback);
+  ScopedReceiveSurface r(service_.get(), &callback);
+
+  absl::Notification timed_out_notification;
+  EXPECT_CALL(callback, OnTransferUpdate(testing::_, testing::_, testing::_))
+      .WillOnce([&](const ShareTarget& share_target,
+                    const AttachmentContainer& /*container*/,
+                    TransferMetadata metadata) {
+        EXPECT_EQ(share_target.id, share_target_id);
+        EXPECT_TRUE(metadata.is_final_status());
+        EXPECT_EQ(metadata.status(), TransferMetadata::Status::kTimedOut);
+        timed_out_notification.Notify();
+      });
+  SendConnectionResponse(ConnectionResponseFrame::TIMED_OUT);
+  EXPECT_TRUE(
+      timed_out_notification.WaitForNotificationWithTimeout(kWaitTimeout));
 }
 
 TEST_F(NearbySharingServiceImplTest,

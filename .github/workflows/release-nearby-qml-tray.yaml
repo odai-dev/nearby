@@ -131,6 +131,14 @@ jobs:
       - name: Install to staging directory
         run: cmake --install sharing/linux/qml_tray_app/build
 
+      - name: Patch staged runtime search paths
+        run: |
+          STAGING="$RUNNER_TEMP/staging"
+          patchelf --set-rpath '$ORIGIN/../lib' \
+            "$STAGING/bin/nearby_qml_file_tray_app"
+          patchelf --set-rpath '$ORIGIN' \
+            "$STAGING/lib/libnearby_sharing_api_shared.so"
+
       - name: Stage installer and launcher assets
         run: |
           STAGING="$RUNNER_TEMP/staging"

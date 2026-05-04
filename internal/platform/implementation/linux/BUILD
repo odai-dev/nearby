@@ -63,7 +63,10 @@ cc_library(
         "utils.h",
     ],
     copts = ["-lrt"],
-    visibility = ["//third_party/nearby/sharing/internal/impl/linux:__pkg__"],
+    visibility = [
+        "//third_party/nearby/sharing/internal/impl/linux:__pkg__",
+        "//sharing:__subpackages__",
+    ],
     deps = [
         ":comm",
         "//internal/platform/implementation:types",
@@ -171,7 +174,7 @@ cc_library(
         "system_clock.cc",
     ],
     visibility = [
-        "//sharing/linux:__pkg__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         "//internal/platform:base",
@@ -238,6 +241,7 @@ cc_library(
         "//location/nearby:__subpackages__",
         "//presence:__subpackages__",
         "//third_party/nearby/sharing:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         ":comm",
@@ -303,6 +307,7 @@ cc_test(
         "atomic_boolean_test.cc",
         "atomic_reference_test.cc",
         "mutex_test.cc",
+        "tcp_server_socket_test.cc",
         "utils_test.cc",
         # "bluetooth_adapter_test.cc",
         # "crypto_test.cc",

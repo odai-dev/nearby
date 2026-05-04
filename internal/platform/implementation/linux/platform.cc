@@ -61,6 +61,38 @@
 
 namespace nearby {
 namespace api {
+
+namespace {
+
+constexpr char kNCRelativePath[] = "Google/Nearby/Connections";
+
+std::string GetEnvOrDefault(const char* key, std::string fallback) {
+  const char* value = std::getenv(key);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  return value;
+}
+
+std::filesystem::path GetHomeDirectory() {
+  return std::filesystem::path(GetEnvOrDefault("HOME", "/tmp"));
+}
+
+std::filesystem::path GetDownloadDirectory() {
+  const char* download_dir = std::getenv("XDG_DOWNLOAD_DIR");
+  if (download_dir != nullptr && *download_dir != '\0') {
+    return std::filesystem::path(download_dir);
+  }
+  return GetHomeDirectory() / "Downloads";
+}
+
+std::filesystem::path GetConfigDirectory() {
+  return std::filesystem::path(GetEnvOrDefault(
+      "XDG_CONFIG_HOME", (GetHomeDirectory() / ".config").string()));
+}
+
+}  // namespace
+
 std::string ImplementationPlatform::GetCustomSavePath(
     const std::string &parent_folder, const std::string &file_name) {
   auto fs = std::filesystem::path(parent_folder);
@@ -69,63 +101,22 @@ std::string ImplementationPlatform::GetCustomSavePath(
 
 std::string ImplementationPlatform::GetDownloadPath(
     const std::string &parent_folder, const std::string &file_name) {
-  std::filesystem::path downloads;
-  const char* download_dir = getenv("XDG_DOWNLOAD_DIR");
-  
-  if (download_dir != nullptr) {
-    downloads = std::filesystem::path(download_dir);
-  } else {
-    // Fallback to ~/Downloads if XDG_DOWNLOAD_DIR is not set
-    const char* home = getenv("HOME");
-    if (home != nullptr) {
-      downloads = std::filesystem::path(home) / "Downloads";
-    } else {
-      downloads = "/tmp/Downloads";
-    }
-  }
-  
-  return (downloads / std::filesystem::path(parent_folder).filename() /
+  return (GetDownloadDirectory() /
+          std::filesystem::path(parent_folder).filename() /
           std::filesystem::path(file_name).filename()).string();
 }
 
 std::string ImplementationPlatform::GetDownloadPath(
     const std::string &file_name) {
-  std::filesystem::path downloads;
-  const char* download_dir = getenv("XDG_DOWNLOAD_DIR");
-  
-  if (download_dir != nullptr) {
-    downloads = std::filesystem::path(download_dir);
-  } else {
-    // Fallback to ~/Downloads if XDG_DOWNLOAD_DIR is not set
-    const char* home = getenv("HOME");
-    if (home != nullptr) {
-      downloads = std::filesystem::path(home) / "Downloads";
-    } else {
-      downloads = "/tmp/Downloads";
-    }
-  }
-  
-  return (downloads / std::filesystem::path(file_name).filename()).string();
+  return (GetDownloadDirectory() /
+          std::filesystem::path(file_name).filename()).string();
 }
 
 std::string ImplementationPlatform::GetAppDataPath(
     const std::string &file_name) {
-  std::filesystem::path state;
-  const char* state_home = getenv("XDG_STATE_HOME");
-  
-  if (state_home != nullptr) {
-    state = std::filesystem::path(state_home);
-  } else {
-    // Fallback to ~/.local/state if XDG_STATE_HOME is not set
-    const char* home = getenv("HOME");
-    if (home != nullptr) {
-      state = std::filesystem::path(home) / ".local" / "state";
-    } else {
-      state = "/tmp/state";
-    }
-  }
-  
-  return (state / std::filesystem::path(file_name).filename()).string();
+  return (GetConfigDirectory() / kNCRelativePath /
+          std::filesystem::path(file_name).filename())
+      .string();
 }
 
 OSName ImplementationPlatform::GetCurrentOS() { return OSName::kWindows; }

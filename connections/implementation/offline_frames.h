@@ -110,6 +110,7 @@ ByteArray ForBwuFailure(const UpgradePathInfo& info);
 ByteArray ForBwuPathRequest(
     const std::vector<Medium>& mediums,
     const location::nearby::connections::MediumRole& medium_role);
+ByteArray ForBwuRetry(const std::vector<Medium>& mediums, bool is_request);
 ByteArray ForBwuLastWrite();
 ByteArray ForBwuSafeToClose();
 
@@ -129,6 +130,8 @@ Medium ConnectionRequestMediumToMedium(
 std::vector<Medium> ConnectionRequestMediumsToMediums(
     const location::nearby::connections::ConnectionRequestFrame&
         connection_request_frame);
+std::vector<Medium> BwuRetryMediumsToMediums(
+    const location::nearby::connections::BandwidthUpgradeRetryFrame& frame);
 MediumMetadata::WifiDirectAuthType WFDAuthTypeToMediumMetadataWFDAuthType(
     WifiDirectAuthType wifi_direct_auth_type);
 WifiDirectAuthType MediumMetadataWFDAuthTypeToWFDAuthType(

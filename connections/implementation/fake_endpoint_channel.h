@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -52,11 +53,13 @@ class FakeEndpointChannel : public EndpointChannel {
   }
   Exception Write(const ByteArray& data) override {
     write_timestamp_ = SystemClock::ElapsedRealtime();
+    written_data_.push_back(data);
     return write_output_;
   }
   Exception Write(absl::string_view data,
                   PacketMetaData& packet_meta_data) override {
     write_timestamp_ = SystemClock::ElapsedRealtime();
+    written_data_.emplace_back(std::string(data));
     return write_output_;
   }
   void Close() override { is_closed_ = true; }
@@ -113,10 +116,12 @@ class FakeEndpointChannel : public EndpointChannel {
   disconnection_reason() const {
     return disconnection_reason_;
   }
+  const std::vector<ByteArray>& written_data() const { return written_data_; }
 
  private:
   ExceptionOr<ByteArray> read_output_;
   Exception write_output_{Exception::kSuccess};
+  std::vector<ByteArray> written_data_;
   Medium medium_;
   std::string service_id_;
   absl::Time read_timestamp_ = absl::InfinitePast();

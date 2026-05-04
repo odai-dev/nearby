@@ -2485,6 +2485,57 @@ void NearbySharingServiceImpl::OnIncomingSessionFrameRead(
         session->ProcessSyncFrame(sync_manager_, frame->file_sync());
       }
       break;
+    case service::proto::V1Frame::RESPONSE: {
+      if (!frame->has_connection_response()) {
+        VLOG(1) << __func__
+                << ": Ignoring compatibility response frame with no status.";
+        break;
+      }
+      ConnectionResponseFrame::Status status =
+          frame->connection_response().status();
+      if (status == ConnectionResponseFrame::ACCEPT ||
+          status == ConnectionResponseFrame::UNKNOWN) {
+        VLOG(1) << __func__ << ": Ignoring receiver-side compatibility response "
+                   "status "
+                << ConnectionResponseFrame::Status_Name(status);
+        break;
+      }
+
+      TransferMetadata::Status transfer_status = TransferMetadata::Status::kFailed;
+      switch (status) {
+        case ConnectionResponseFrame::REJECT:
+          transfer_status = TransferMetadata::Status::kRejected;
+          break;
+        case ConnectionResponseFrame::NOT_ENOUGH_SPACE:
+          transfer_status = TransferMetadata::Status::kNotEnoughSpace;
+          break;
+        case ConnectionResponseFrame::UNSUPPORTED_ATTACHMENT_TYPE:
+          transfer_status = TransferMetadata::Status::kUnsupportedAttachmentType;
+          break;
+        case ConnectionResponseFrame::TIMED_OUT:
+          transfer_status = TransferMetadata::Status::kTimedOut;
+          break;
+        default:
+          break;
+      }
+      LOG(WARNING) << __func__
+                   << ": Received terminal compatibility response status: "
+                   << ConnectionResponseFrame::Status_Name(status)
+                   << " from target: " << share_target_id;
+      session->Abort(transfer_status);
+      return;
+    }
+    case service::proto::V1Frame::PROGRESS_UPDATE:
+      VLOG(1) << __func__
+              << ": Ignoring deprecated compatibility progress update frame.";
+      break;
+    case service::proto::V1Frame::PAIRED_KEY_ENCRYPTION:
+    case service::proto::V1Frame::PAIRED_KEY_RESULT:
+    case service::proto::V1Frame::CERTIFICATE_INFO:
+      VLOG(1) << __func__
+              << ": Ignoring compatibility frame type: "
+              << static_cast<int>(frame->type());
+      break;
     default:
       LOG(ERROR) << __func__ << ": Discarding unknown frame of type: "
                  << static_cast<int>(frame->type());
@@ -3176,6 +3227,15 @@ void NearbySharingServiceImpl::UpdateFilePathsInProgress(
   update_file_paths_in_progress_ = update_file_paths;
   VLOG(1) << __func__
           << ": Update file paths in progress: " << update_file_paths;
+}
+
+std::optional<Medium> NearbySharingServiceImpl::GetUpgradedMedium(
+    int64_t share_target_id) const {
+  auto* session =
+      const_cast<NearbySharingServiceImpl*>(this)->GetShareSession(
+          share_target_id);
+  if (!session) return std::nullopt;
+  return nearby_connections_manager_->GetUpgradedMedium(session->endpoint_id());
 }
 
 }  // namespace nearby::sharing

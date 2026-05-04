@@ -11,6 +11,7 @@ INCLUDEDIR=""
 SKIP_BUILD=0
 NEEDS_ELEVATION=0
 INSTALL_PREFIX=()
+WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
   cat <<USAGE
@@ -49,6 +50,39 @@ run_bazel() {
   else
     "$BAZEL_CMD" "$@"
   fi
+}
+
+resolve_sdbus_runtime() {
+  local -a search_dirs=()
+  local pkgconfig_libdir=""
+
+  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists sdbus-c++; then
+    pkgconfig_libdir="$(pkg-config --variable=libdir sdbus-c++ 2>/dev/null || true)"
+    if [[ -n "$pkgconfig_libdir" ]]; then
+      search_dirs+=("$pkgconfig_libdir")
+    fi
+  fi
+
+  search_dirs+=(
+    "/usr/local/lib"
+    "/usr/lib/x86_64-linux-gnu"
+    "/usr/lib64"
+    "/usr/lib"
+    "$WORKSPACE_ROOT/sdbus-cpp/install/lib"
+  )
+
+  local dir
+  local candidate
+  for dir in "${search_dirs[@]}"; do
+    for candidate in "$dir/libsdbus-c++.so.2" "$dir/libsdbus-c++.so"; do
+      if [[ -e "$candidate" ]]; then
+        readlink -f "$candidate"
+        return 0
+      fi
+    done
+  done
+
+  return 1
 }
 
 nearest_existing_parent() {
@@ -132,6 +166,7 @@ fi
 echo "[2/4] Resolving bazel-bin path"
 BAZEL_BIN="$(run_bazel info bazel-bin)"
 LIB_SRC="${BAZEL_BIN}/sharing/linux/libnearby_sharing_api_shared.so"
+SDBUS_RUNTIME_SRC="$(resolve_sdbus_runtime || true)"
 
 if [[ ! -f "$LIB_SRC" ]]; then
   echo "Shared library not found: $LIB_SRC" >&2
@@ -139,19 +174,36 @@ if [[ ! -f "$LIB_SRC" ]]; then
   exit 1
 fi
 
-echo "[3/4] Installing library and header"
+if [[ -z "$SDBUS_RUNTIME_SRC" || ! -f "$SDBUS_RUNTIME_SRC" ]]; then
+  echo "Failed to locate libsdbus-c++.so.2 for the current host toolchain." >&2
+  echo "Install a compatible sdbus-c++ development/runtime package first, or make it discoverable via pkg-config." >&2
+  exit 1
+fi
+
+echo "[3/5] Installing library, runtime, and header"
 "${INSTALL_PREFIX[@]}" install -d "$LIBDIR"
 "${INSTALL_PREFIX[@]}" install -d "${INCLUDEDIR}/sharing/linux"
 "${INSTALL_PREFIX[@]}" install -m 0755 "$LIB_SRC" "$LIBDIR/"
+"${INSTALL_PREFIX[@]}" install -m 0755 "$SDBUS_RUNTIME_SRC" "$LIBDIR/libsdbus-c++.so.2"
 "${INSTALL_PREFIX[@]}" install -m 0644 "$HEADER_SRC" "${INCLUDEDIR}/sharing/linux/"
 
-if command -v ldconfig >/dev/null 2>&1; then
-  echo "[4/4] Refreshing dynamic linker cache"
+if command -v patchelf >/dev/null 2>&1; then
+  echo "[4/5] Setting local runtime search path"
+  "${INSTALL_PREFIX[@]}" patchelf --set-rpath '$ORIGIN' \
+    "$LIBDIR/$(basename "$LIB_SRC")"
+else
+  echo "[4/5] Skipping rpath patch (patchelf not installed)"
+  echo "Warning: install patchelf to make the installed Nearby library prefer the colocated libsdbus-c++.so.2 copy." >&2
+fi
+
+if command -v ldconfig >/dev/null 2>&1 && [[ "$PREFIX" == "/usr" || "$PREFIX" == "/usr/local" ]]; then
+  echo "[5/5] Refreshing dynamic linker cache"
   "${INSTALL_PREFIX[@]}" ldconfig
 else
-  echo "[4/4] ldconfig not found; skipping linker cache refresh"
+  echo "[5/5] Skipping linker cache refresh for prefix $PREFIX"
 fi
 
 echo "Installed:"
 echo "  library: $LIBDIR/$(basename "$LIB_SRC")"
+echo "  runtime: $LIBDIR/libsdbus-c++.so.2"
 echo "  header : ${INCLUDEDIR}/sharing/linux/$(basename "$HEADER_SRC")"

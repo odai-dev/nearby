@@ -92,6 +92,8 @@ class NearbyConnectionsManagerImpl : public NearbyConnectionsManager {
   absl::flat_hash_set<FilePath> GetAndClearUnknownFilePathsToDelete() override;
   std::string Dump() const override;
 
+  std::optional<Medium> GetUpgradedMedium(absl::string_view endpoint_id) const override;
+
   NearbyConnectionsService* GetNearbyConnectionsService() const {
     return nearby_connections_service_.get();
   }
@@ -137,8 +139,6 @@ class NearbyConnectionsManagerImpl : public NearbyConnectionsManager {
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   void Reset();
-
-  std::optional<Medium> GetUpgradedMedium(absl::string_view endpoint_id) const;
 
   void SendWithoutDelay(absl::string_view endpoint_id,
                         std::unique_ptr<Payload> payload);

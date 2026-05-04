@@ -65,14 +65,19 @@ bool FileShareState::HasTarget(qlonglong id) const {
 
 void FileShareState::AddOrUpdateTransfer(
     qlonglong target_id, const QString& target_name, const QString& status,
-    double progress, qulonglong transferred_bytes, const QString& direction,
-    const QString& file_name, const QString& file_path) {
+    double progress, qulonglong transferred_bytes, qulonglong total_bytes,
+    qulonglong transfer_speed, const QString& connection_medium,
+    const QString& direction, const QString& file_name,
+    const QString& file_path) {
   QVariantMap transfer{
       {QStringLiteral("targetId"), target_id},
       {QStringLiteral("targetName"), target_name},
       {QStringLiteral("status"), status},
       {QStringLiteral("progress"), progress},
       {QStringLiteral("transferredBytes"), transferred_bytes},
+      {QStringLiteral("totalBytes"), total_bytes},
+      {QStringLiteral("transferSpeed"), transfer_speed},
+      {QStringLiteral("connectionMedium"), connection_medium},
       {QStringLiteral("direction"), direction},
       {QStringLiteral("fileName"), file_name},
       {QStringLiteral("filePath"), file_path},

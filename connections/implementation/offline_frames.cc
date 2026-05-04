@@ -40,6 +40,7 @@ using ExceptionOrOfflineFrame =
     ExceptionOr<::location::nearby::connections::OfflineFrame>;
 using ::location::nearby::connections::AutoReconnectFrame;
 using ::location::nearby::connections::BandwidthUpgradeNegotiationFrame;
+using ::location::nearby::connections::BandwidthUpgradeRetryFrame;
 using ::location::nearby::connections::ConnectionRequestFrame;
 using ::location::nearby::connections::ConnectionResponseFrame;
 using ::location::nearby::connections::KeepAliveFrame;
@@ -55,6 +56,68 @@ ByteArray ToBytes(OfflineFrame&& frame) {
   frame.set_version(OfflineFrame::V1);
   frame.SerializeToArray(bytes.data(), bytes.size());
   return bytes;
+}
+
+BandwidthUpgradeRetryFrame::Medium MediumToBwuRetryMedium(Medium medium) {
+  switch (medium) {
+    case Medium::BLUETOOTH:
+      return BandwidthUpgradeRetryFrame::BLUETOOTH;
+    case Medium::WIFI_HOTSPOT:
+      return BandwidthUpgradeRetryFrame::WIFI_HOTSPOT;
+    case Medium::BLE:
+      return BandwidthUpgradeRetryFrame::BLE;
+    case Medium::WIFI_LAN:
+      return BandwidthUpgradeRetryFrame::WIFI_LAN;
+    case Medium::WIFI_AWARE:
+      return BandwidthUpgradeRetryFrame::WIFI_AWARE;
+    case Medium::NFC:
+      return BandwidthUpgradeRetryFrame::NFC;
+    case Medium::WIFI_DIRECT:
+      return BandwidthUpgradeRetryFrame::WIFI_DIRECT;
+    case Medium::WEB_RTC:
+      return BandwidthUpgradeRetryFrame::WEB_RTC;
+    case Medium::BLE_L2CAP:
+      return BandwidthUpgradeRetryFrame::BLE_L2CAP;
+    case Medium::USB:
+      return BandwidthUpgradeRetryFrame::USB;
+    case Medium::WEB_RTC_NON_CELLULAR:
+      return BandwidthUpgradeRetryFrame::WEB_RTC_NON_CELLULAR;
+    case Medium::AWDL:
+      return BandwidthUpgradeRetryFrame::AWDL;
+    default:
+      return BandwidthUpgradeRetryFrame::UNKNOWN_MEDIUM;
+  }
+}
+
+Medium BwuRetryMediumToMedium(BandwidthUpgradeRetryFrame::Medium medium) {
+  switch (medium) {
+    case BandwidthUpgradeRetryFrame::BLUETOOTH:
+      return Medium::BLUETOOTH;
+    case BandwidthUpgradeRetryFrame::WIFI_HOTSPOT:
+      return Medium::WIFI_HOTSPOT;
+    case BandwidthUpgradeRetryFrame::BLE:
+      return Medium::BLE;
+    case BandwidthUpgradeRetryFrame::WIFI_LAN:
+      return Medium::WIFI_LAN;
+    case BandwidthUpgradeRetryFrame::WIFI_AWARE:
+      return Medium::WIFI_AWARE;
+    case BandwidthUpgradeRetryFrame::NFC:
+      return Medium::NFC;
+    case BandwidthUpgradeRetryFrame::WIFI_DIRECT:
+      return Medium::WIFI_DIRECT;
+    case BandwidthUpgradeRetryFrame::WEB_RTC:
+      return Medium::WEB_RTC;
+    case BandwidthUpgradeRetryFrame::BLE_L2CAP:
+      return Medium::BLE_L2CAP;
+    case BandwidthUpgradeRetryFrame::USB:
+      return Medium::USB;
+    case BandwidthUpgradeRetryFrame::WEB_RTC_NON_CELLULAR:
+      return Medium::WEB_RTC_NON_CELLULAR;
+    case BandwidthUpgradeRetryFrame::AWDL:
+      return Medium::AWDL;
+    default:
+      return Medium::UNKNOWN_MEDIUM;
+  }
 }
 
 }  // namespace
@@ -537,6 +600,21 @@ ByteArray ForBwuPathRequest(const std::vector<Medium>& mediums,
   return ToBytes(std::move(frame));
 }
 
+ByteArray ForBwuRetry(const std::vector<Medium>& mediums, bool is_request) {
+  OfflineFrame frame;
+
+  frame.set_version(OfflineFrame::V1);
+  auto* v1_frame = frame.mutable_v1();
+  v1_frame->set_type(V1Frame::BANDWIDTH_UPGRADE_RETRY);
+  auto* retry_frame = v1_frame->mutable_bandwidth_upgrade_retry();
+  retry_frame->set_is_request(is_request);
+  for (Medium medium : mediums) {
+    retry_frame->add_supported_medium(MediumToBwuRetryMedium(medium));
+  }
+
+  return ToBytes(std::move(frame));
+}
+
 ByteArray ForKeepAlive() {
   OfflineFrame frame;
 
@@ -733,6 +811,16 @@ std::vector<Medium> ConnectionRequestMediumsToMediums(
   for (const auto& int_medium : frame.mediums()) {
     result.push_back(ConnectionRequestMediumToMedium(
         static_cast<ConnectionRequestFrame::Medium>(int_medium)));
+  }
+  return result;
+}
+
+std::vector<Medium> BwuRetryMediumsToMediums(
+    const BandwidthUpgradeRetryFrame& frame) {
+  std::vector<Medium> result;
+  for (const auto& int_medium : frame.supported_medium()) {
+    result.push_back(BwuRetryMediumToMedium(
+        static_cast<BandwidthUpgradeRetryFrame::Medium>(int_medium)));
   }
   return result;
 }

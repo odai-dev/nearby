@@ -103,10 +103,8 @@ class LEAdvertisementManager final
   LEAdvertisementManager(sdbus::IConnection& system_bus,
                          BluetoothAdapter& adapter)
       : ProxyInterfaces(system_bus, sdbus::ServiceName("org.bluez"),
-                        adapter.GetObjectPath()) {
-    registerProxy();
-  }
-  ~LEAdvertisementManager() { unregisterProxy(); }
+                        adapter.GetObjectPath()) {}
+  ~LEAdvertisementManager() = default;
 
   LEAdvertisementManager(const LEAdvertisementManager&) = delete;
   LEAdvertisementManager(LEAdvertisementManager&&) = delete;

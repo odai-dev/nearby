@@ -1958,7 +1958,7 @@ Exception BasePcpHandler::OnIncomingConnection(
       LOG(ERROR) << "Failed to parse incoming connection request; client="
                  << client->GetClientId() << "; device="
                  << absl::BytesToHexString(remote_endpoint_info.data())
-                 << "with error: " << wrapped_frame.exception();
+                 << " with error: " << wrapped_frame.exception();
       // Do not log connection failure if no data is received from the channel.
       // This prevents logging Wifi connection failure when mDNS client connects
       // to test the connection.
@@ -1975,6 +1975,13 @@ Exception BasePcpHandler::OnIncomingConnection(
   }
 
   OfflineFrame& frame = wrapped_frame.result();
+  if (parser::GetFrameType(frame) != V1Frame::CONNECTION_REQUEST) {
+    VLOG(1) << "Ignoring non-connection pre-connection frame type="
+            << parser::GetFrameType(frame) << " on medium "
+            << location::nearby::proto::connections::Medium_Name(medium);
+    channel->Close();
+    return {Exception::kSuccess};
+  }
   const ConnectionRequestFrame& connection_request =
       frame.v1().connection_request();
   LOG(INFO) << "In onIncomingConnection("
@@ -2479,16 +2486,8 @@ ExceptionOr<OfflineFrame> BasePcpHandler::ReadConnectionRequestFrame(
 
   ByteArray bytes = std::move(wrapped_bytes.result());
   ExceptionOr<OfflineFrame> wrapped_frame = parser::FromBytes(bytes);
-  if (wrapped_frame.GetException().Raised(Exception::kInvalidProtocolBuffer)) {
-    return ExceptionOr<OfflineFrame>(Exception::kIo);
-  }
-
-  OfflineFrame& frame = wrapped_frame.result();
-  if (V1Frame::CONNECTION_REQUEST != parser::GetFrameType(frame)) {
-    return ExceptionOr<OfflineFrame>(Exception::kIo);
-  }
-
-  return wrapped_frame;
+  if (!wrapped_frame.ok()) return wrapped_frame;
+  return ExceptionOr<OfflineFrame>(std::move(wrapped_frame.result()));
 }
 
 std::string BasePcpHandler::GetHashedConnectionToken(

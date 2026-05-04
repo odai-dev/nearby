@@ -120,34 +120,15 @@ filegroup(
     ],
 )
 
-# Create a repo that exposes system-installed sdbus-c++ and libsystemd to Bazel.
+# Create a repo that exposes host-installed sdbus-c++ and libsystemd to Bazel.
 #
-# Important portability note:
-# Avoid hardcoding distro-specific library directories (for example
-# /usr/lib/x86_64-linux-gnu vs /usr/lib64). Instead, link by soname and let the
-# system linker/search path resolve the actual shared object location.
-new_local_repository = use_repo_rule(
-    "@bazel_tools//tools/build_defs/repo:local.bzl",
-    "new_local_repository",
+# The helper repository rule chooses one concrete host installation prefix
+# end-to-end, so the headers and the linked shared object always come from the
+# same place. This avoids mixing /usr headers with /usr/local libraries (or the
+# other way around) on Pop!_OS / Ubuntu systems.
+host_sdbus_cpp_repository = use_repo_rule(
+    "//bazel:sdbus_cpp_repo.bzl",
+    "host_sdbus_cpp_repository",
 )
 
-new_local_repository(
-    name = "sdbus_cpp",
-    path = "/usr",
-    build_file_content = """
-package(default_visibility = ["//visibility:public"])
-
-load("@rules_cc//cc:defs.bzl", "cc_library")
-cc_library(
-    name = "sdbus_cpp",
-    hdrs = glob(["include/sdbus-c++/**/*.h*"]),
-    includes = ["include"],
-    linkopts = ["-lsdbus-c++"],
-)
-
-cc_library(
-    name = "libsystemd",
-    linkopts = ["-lsystemd"],
-)
-""",
-)
+host_sdbus_cpp_repository(name = "sdbus_cpp")

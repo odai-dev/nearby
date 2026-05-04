@@ -21,7 +21,7 @@ Item {
     readonly property bool canSend: fileShareController.mode === "Send"
                                     && fileShareController.pendingSendFilePath.length > 0
 
-    readonly property string targetName: modelData.name && modelData.name.length > 0
+    readonly property string targetName: modelData && modelData.name && modelData.name.length > 0
                                          ? modelData.name : "Unknown device"
     readonly property var transferData: transferForTarget()
     readonly property string transferStatus: transferData ? String(transferData.status || "") : ""
@@ -58,6 +58,8 @@ Item {
     }
 
     function transferForTarget() {
+        if (!modelData)
+            return null
         var transfers = fileShareController.transfers
         for (var i = 0; i < transfers.length; ++i) {
             var entry = transfers[i]
@@ -65,6 +67,24 @@ Item {
                 return entry
         }
         return null
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return "0 B"
+        var k = 1024
+        var sizes = ["B", "KB", "MB", "GB", "TB"]
+        var i = Math.floor(Math.log(bytes) / Math.log(k))
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    }
+
+    function formatTransferSize(transferred, total) {
+        if (!total || total === 0) return formatBytes(transferred)
+        var k = 1024
+        var sizes = ["B", "KB", "MB", "GB", "TB"]
+        var i = Math.floor(Math.log(total) / Math.log(k))
+        var totalStr = parseFloat((total / Math.pow(k, i)).toFixed(1))
+        var transStr = parseFloat((transferred / Math.pow(k, i)).toFixed(1))
+        return transStr + "/" + totalStr + " " + sizes[i]
     }
 
     Column {
@@ -190,6 +210,48 @@ Item {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             color: textPrimary
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            visible: isTransferActive && !isConnecting && transferData && transferData.totalBytes > 0
+            text: Math.floor(transferProgress * 100) + "%"
+            font.pixelSize: 12
+            font.weight: Font.Medium
+            color: "#10b981"
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            visible: isTransferActive && !isConnecting && transferData && transferData.totalBytes > 0
+            text: transferData ? formatTransferSize(transferData.transferredBytes, transferData.totalBytes) : ""
+            font.pixelSize: 11
+            color: textMuted
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            visible: isTransferActive && !isConnecting && transferData && transferData.transferSpeed > 0
+            text: transferData ? formatBytes(transferData.transferSpeed) + "/s" : ""
+            font.pixelSize: 11
+            color: textMuted
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            visible: isTransferActive && transferData && transferData.connectionMedium.length > 0
+            text: transferData ? transferData.connectionMedium : ""
+            font.pixelSize: 10
+            font.weight: Font.Medium
+            color: "#6b7280"
         }
     }
 

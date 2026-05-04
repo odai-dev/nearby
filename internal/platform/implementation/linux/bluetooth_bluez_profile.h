@@ -112,10 +112,8 @@ class ProfileManager final
   ProfileManager(sdbus::IConnection &system_bus, BluetoothDevices &devices)
       : ProxyInterfaces(system_bus, sdbus::ServiceName(bluez::SERVICE_DEST),
                         sdbus::ObjectPath("/org/bluez")),
-        devices_(devices) {
-    registerProxy();
-  }
-  ~ProfileManager() { unregisterProxy(); }
+        devices_(devices) {}
+  ~ProfileManager() = default;
 
   bool ProfileRegistered(absl::string_view service_uuid)
       ABSL_LOCKS_EXCLUDED(registered_service_uuids_mutex_);

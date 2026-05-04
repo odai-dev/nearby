@@ -166,6 +166,9 @@ class NearbyConnectionsManager {
 
   // Dump internal state for debugging purposes.
   virtual std::string Dump() const = 0;
+
+  // Returns the upgraded medium for the given endpoint_id, if any.
+  virtual std::optional<Medium> GetUpgradedMedium(absl::string_view endpoint_id) const = 0;
 };
 
 }  // namespace nearby::sharing

@@ -38,21 +38,35 @@ If you want any clarification on anything, feel free to open an issue. I'll get 
 As a consolation prize, I've indexed this project using [Deepwiki](https://deepwiki.com/kidfromjupiter/nearby). You might have strong feeling about AI use. But I feel like documenting very large codebases is a perfect usecase for such models. (They are called Large Language Models for a reason )
 
 ### How to install
-This repo provides prebuilt binaries of the Quick Share application. The only officially supported distro is Fedora 43 for now. The newest ubuntu images *should* work fine
-although that needs to be tested. I want to support more distros so if you encounter issues installing on your distro, please let me know. 
+This repo provides prebuilt binaries of the Quick Share application and also builds cleanly from source on Ubuntu-family systems such as Pop!_OS 24.04.
+Fedora remains supported, and the release bundle now carries the `libsdbus-c++.so.2` runtime so it does not depend on a manual `/usr/local` install of `sdbus-c++`.
 
 
 #### Prerequisites
 
-- `sdbus-cpp >= 2.0`
-- `bluez >= 5.85`
+- `bluez`
+- `NetworkManager`
+- `Avahi`
+- Qt 6 runtime libraries
+- `libqrencode`
 
-**To install the prerequisites, run this command**
+**On Fedora**
 
 ```bash
 sudo dnf install -y \
   bluez bluez-libs bluez-libs-devel \
-  sdbus-cpp sdbus-cpp-devel
+  sdbus-cpp sdbus-cpp-devel \
+  NetworkManager avahi avahi-tools \
+  qt6-qtbase qt6-qtdeclarative qrencode-libs
+```
+
+**On Pop!_OS / Ubuntu 24.04**
+
+```bash
+sudo apt install -y \
+  bluez network-manager avahi-daemon avahi-utils \
+  qt6-base-dev qt6-declarative-dev qt6-wayland \
+  qt6-tools-dev qt6-tools-dev-tools libqrencode-dev
 ```
 ---
 
@@ -65,9 +79,19 @@ sudo dnf install -y \
 5. `chmod +x install_nearby_file_share.sh`
 6. `./install_nearby_file_share.sh`
 
+The installer now checks for missing Qt / qrencode / Bluetooth / NetworkManager / Avahi prerequisites up front and prints Pop!_OS / Ubuntu-friendly remediation hints instead of installing a bundle that cannot start.
+
 **To install the actual library and headers,**
 
-Currently there are no prebuilt shared library or headers. You'll have to build them yourself
+If you want the Linux shared library and public headers for development, build them from source:
+
+```bash
+./sharing/linux/install_nearby_sharing_service.sh
+```
+
+That helper now installs the matching `libsdbus-c++.so.2` beside `libnearby_sharing_api_shared.so` and patches the library runpath so the QML tray app prefers the colocated runtime copy instead of an unrelated global one.
+
+Source builds still need a compatible `sdbus-c++` development install discoverable via `pkg-config` (or installed under `/usr` or `/usr/local`) so Bazel can compile the Linux shared library.
 
 ### How to build
 Check the [wiki](https://github.com/kidfromjupiter/nearby/wiki/Development-Environment-and-Building)

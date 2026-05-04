@@ -43,6 +43,14 @@ Reason: NetworkManager does not natively support creating Wi-Fi Direct Group Own
 
 ## Installation
 
+### Pop!_OS / Ubuntu notes
+
+- Pop!_OS 24.04 and Ubuntu 24.04 source builds are supported.
+- The release bundle includes `libsdbus-c++.so.2`, so bundle installs do not require a manual `/usr/local` `sdbus-c++` install.
+- Older BlueZ releases can lack some optional extended-advertising properties. In that case the app falls back to non-extended BLE behavior instead of failing at startup.
+- `./sharing/linux/install_nearby_sharing_service.sh` now installs a matching `libsdbus-c++.so.2` next to `libnearby_sharing_api_shared.so` and patches the library runpath to prefer that colocated runtime copy.
+- Source builds still need a compatible `sdbus-c++` development install discoverable via `pkg-config` or installed under `/usr` or `/usr/local`.
+
 ### 1. Install the shared library
 
 From the repository root:
@@ -53,6 +61,7 @@ From the repository root:
 
 This installs:
 - `libnearby_sharing_api_shared.so`
+- `libsdbus-c++.so.2`
 - `sharing/linux/nearby_sharing_api.h`
 
 ### 2. Build and run the CLI sample app (optional)
@@ -76,6 +85,15 @@ cmake --build build -j
 ./build/nearby_qml_file_tray_app
 ```
 
+If you are building on Pop!_OS / Ubuntu and do not already have the dev packages installed, use:
+
+```bash
+sudo apt install -y \
+  bluez network-manager avahi-daemon avahi-utils \
+  qt6-base-dev qt6-declarative-dev qt6-wayland \
+  qt6-tools-dev qt6-tools-dev-tools libqrencode-dev
+```
+
 ### 4. Install launcher entry (`.desktop`) for the tray app
 
 From `sharing/linux/qml_tray_app`:
@@ -89,6 +107,8 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 ```
 
 After this, search for `Nearby File Share` in your desktop launcher.
+
+For the packaged release bundle, prefer the included `install_nearby_file_share.sh` instead of manually editing the desktop file. The installer validates runtime dependencies before copying files into place.
 
 ## Documentation
 

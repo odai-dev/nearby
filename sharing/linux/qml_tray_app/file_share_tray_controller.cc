@@ -114,7 +114,9 @@ void FileShareTrayController::handleTransferUpdate(
   }
 
   state_.AddOrUpdateTransfer(update.share_target_id, name, status, update.progress,
-                             update.transferred_bytes, direction, file_name,
+                             update.transferred_bytes, update.total_bytes,
+                             update.transfer_speed, StringUtils::FromStdString(update.connection_medium),
+                             direction, file_name,
                              StringUtils::FromStdString(update.first_file_path));
   emit transfersChanged();
 
@@ -456,8 +458,8 @@ void FileShareTrayController::sendPendingFileToTarget(qlonglong share_target_id)
   const QString target_name = state_.GetTargetName(share_target_id);
   state_.SetPendingSendFile(file_path, file_info.fileName(), share_target_id);
 
-  state_.AddOrUpdateTransfer(share_target_id, target_name, QStringLiteral("Queued"), 0.0, 0,
-                             QStringLiteral("outgoing"), file_info.fileName(),
+  state_.AddOrUpdateTransfer(share_target_id, target_name, QStringLiteral("Queued"), 0.0, 0, 0, 0,
+                             QStringLiteral("Unknown"), QStringLiteral("outgoing"), file_info.fileName(),
                              file_info.absoluteFilePath());
   emit transfersChanged();
 
@@ -479,7 +481,8 @@ void FileShareTrayController::sendPendingFileToTarget(qlonglong share_target_id)
                   QStringLiteral("Could not send to %1").arg(target_name));
 
               state_.AddOrUpdateTransfer(share_target_id, target_name,
-                                         QStringLiteral("Failed"), 0.0, 0,
+                                         QStringLiteral("Failed"), 0.0, 0, 0, 0,
+                                         QStringLiteral("Unknown"),
                                          QStringLiteral("outgoing"),
                                          state_.pendingSendFileName(),
                                          state_.pendingSendFilePath());
@@ -584,4 +587,19 @@ void FileShareTrayController::notifyStateChange(const QString& property) {
   } else if (property == QStringLiteral("transfers")) {
     emit transfersChanged();
   }
+}
+void FileShareTrayController::acceptTransfer(qlonglong share_target_id) {
+  if (service_) {
+    service_->Accept(share_target_id, [](NearbySharingApi::StatusCode) {});
+  }
+}
+
+void FileShareTrayController::rejectTransfer(qlonglong share_target_id) {
+  if (service_) {
+    service_->Reject(share_target_id, [](NearbySharingApi::StatusCode) {});
+  }
+}
+
+void FileShareTrayController::openFilePicker() {
+  emit requestFilePicker();
 }

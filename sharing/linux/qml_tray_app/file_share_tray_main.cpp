@@ -10,6 +10,7 @@
 #include <QPalette>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQmlError>
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStyleHints>
@@ -36,7 +37,9 @@ bool EnsureLogDirectory(const QString& file_path) {
 
 bool RedirectStdStreamsToFile(const QString& file_path) {
   const QByteArray encoded_path = QFile::encodeName(file_path);
-  const int fd = ::open(encoded_path.constData(), O_CREAT | O_APPEND | O_WRONLY, 0644);
+  const int fd = ::open(encoded_path.constData(),
+                        O_CREAT | O_APPEND | O_WRONLY,
+                        0644);
   if (fd < 0) {
     return false;
   }
@@ -104,6 +107,12 @@ QIcon BuildTintedSymbolicIcon(const QString& source, const QColor& color) {
   return tinted_icon;
 }
 
+void LogQmlWarnings(const QList<QQmlError>& warnings) {
+  for (const auto& warning : warnings) {
+    qWarning().noquote() << warning.toString();
+  }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -112,18 +121,30 @@ int main(int argc, char* argv[]) {
   QApplication app(argc, argv);
   app.setQuitOnLastWindowClosed(false);
 
+  if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+    qWarning() << "System tray is unavailable. The app will keep running, "
+                  "but tray interactions may not work in this session.";
+  }
+
   FileShareTrayController controller;
 
   QQmlApplicationEngine engine;
+  QObject::connect(&engine, &QQmlApplicationEngine::warnings, &engine,
+                   [](const QList<QQmlError>& warnings) {
+                     LogQmlWarnings(warnings);
+                   });
   engine.rootContext()->setContextProperty("fileShareController", &controller);
   engine.load(QUrl(QStringLiteral("qrc:/qml/FileShareTray.qml")));
   if (engine.rootObjects().isEmpty()) {
+    qCritical() << "Failed to load FileShareTray.qml. Check the log for missing "
+                   "Qt runtime components or QML import errors.";
     return 1;
   }
 
 
   auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
   if (window == nullptr) {
+    qCritical() << "QML loaded, but the root object is not a QQuickWindow.";
     return 1;
   }
 
@@ -205,6 +226,15 @@ int main(int argc, char* argv[]) {
                        window->show();
                        window->raise();
                        window->requestActivate();
+                     }
+                   });
+
+  QObject::connect(&controller, &FileShareTrayController::requestFilePicker,
+                   [&controller, window]() {
+                     const QString file = QFileDialog::getOpenFileName(
+                         nullptr, QStringLiteral("Select file to send"));
+                     if (!file.isEmpty()) {
+                       controller.switchToSendModeWithFile(file);
                      }
                    });
 

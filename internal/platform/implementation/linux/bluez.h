@@ -67,10 +67,9 @@ class BluezObjectManager
     : public sdbus::ProxyInterfaces<sdbus::ObjectManager_proxy> {
  public:
   explicit BluezObjectManager(sdbus::IConnection &system_bus)
-      : ProxyInterfaces(system_bus, sdbus::ServiceName("org.bluez"), sdbus::ObjectPath("/")) {
-    registerProxy();
-  }
-  virtual ~BluezObjectManager() { unregisterProxy(); }
+      : ProxyInterfaces(system_bus, sdbus::ServiceName("org.bluez"),
+                        sdbus::ObjectPath("/")) {}
+  virtual ~BluezObjectManager() = default;
 
  protected:
   void onInterfacesAdded(

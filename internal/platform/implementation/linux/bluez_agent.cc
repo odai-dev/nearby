@@ -78,11 +78,10 @@ bool AgentManager::Register(std::optional<absl::string_view> capability,
     const std::string cap =
         capability.has_value() ? std::string(*capability) : "NoInputNoOutput";
     RegisterAgent(agent->getObject().getObjectPath(), cap);
-    RequestDefaultAgent(agent->getObject().getObjectPath());
   } catch (const sdbus::Error& e) {
     LOG(ERROR) << __func__ << ": Got error '" << e.getName()
                << "' with message '" << e.getMessage()
-               << "' while calling RegisterAgent/RequestDefaultAgent on object "
+               << "' while calling RegisterAgent on object "
                << getProxy().getObjectPath();
     return false;
   }

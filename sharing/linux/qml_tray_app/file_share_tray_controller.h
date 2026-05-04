@@ -61,6 +61,9 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void openFileLocation(const QString& file_path);
   Q_INVOKABLE void clearTransfers();
   Q_INVOKABLE void hideToTray();
+  Q_INVOKABLE void acceptTransfer(qlonglong share_target_id);
+  Q_INVOKABLE void rejectTransfer(qlonglong share_target_id);
+  Q_INVOKABLE void openFilePicker();
 
  signals:
   void modeChanged();
@@ -76,6 +79,7 @@ class FileShareTrayController : public QObject {
   void qrCodeUrlChanged();
   void qrCodeChanged();
   void logPathChanged();
+  void requestFilePicker();
 
   void requestTrayMessage(const QString& title, const QString& body);
   void requestCopyLinkTrayMessage(const QString& title, const QString& body,

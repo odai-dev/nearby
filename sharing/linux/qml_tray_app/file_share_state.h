@@ -73,7 +73,8 @@ class FileShareState {
   // Transfer management
   void AddOrUpdateTransfer(qlonglong target_id, const QString& target_name,
                            const QString& status, double progress,
-                           qulonglong transferred_bytes,
+                           qulonglong transferred_bytes, qulonglong total_bytes,
+                           qulonglong transfer_speed, const QString& connection_medium,
                            const QString& direction, const QString& file_name,
                            const QString& file_path);
   void RemoveTransfer(qlonglong target_id);

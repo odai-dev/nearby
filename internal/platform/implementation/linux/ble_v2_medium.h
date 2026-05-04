@@ -129,8 +129,10 @@ class BleV2Medium final : public api::ble::BleMedium {
     try {
       supported_types = adv_monitor_manager_->SupportedMonitorTypes();
     } catch (const sdbus::Error &e) {
-      DBUS_LOG_PROPERTY_GET_ERROR(adv_monitor_manager_, "SupportedMonitorTypes",
-                                  e);
+      LOG(WARNING) << __func__
+                   << ": Could not read SupportedMonitorTypes, disabling "
+                      "AdvertisementMonitorManager pattern filtering: "
+                   << e.getName() << " - " << e.getMessage();
       return false;
     }
 

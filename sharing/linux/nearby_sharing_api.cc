@@ -45,10 +45,22 @@ void EnableBleL2capDefaults() {
       nearby::sharing::config_package_nearby::nearby_sharing_feature::
           kEnableBleForTransfer,
       true);
-  //nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
-  //    nearby::connections::config_package_nearby::nearby_connections_feature::
-  //        kRefactorBleL2cap,
-  //    false);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      nearby::sharing::config_package_nearby::nearby_sharing_feature::
+          kEnableMediumWifiLan,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableWifiDirect,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableWifiHotspotClient,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      nearby::sharing::config_package_nearby::nearby_sharing_feature::
+          kEnableMediumWebRtc,
+      true);
 }
 
 NearbySharingApi::StatusCode ToFacadeStatus(
@@ -139,6 +151,30 @@ float NormalizeFacadeProgress(float progress) {
     return 1.0f;
   }
   return progress / 100.0f;
+}
+
+std::string MediumToString(std::optional<nearby::sharing::Medium> medium) {
+  if (!medium.has_value()) {
+    return "Unknown";
+  }
+  switch (*medium) {
+    case nearby::sharing::Medium::kBluetooth:
+      return "Bluetooth";
+    case nearby::sharing::Medium::kBle:
+      return "BLE";
+    case nearby::sharing::Medium::kMdns:
+      return "mDNS";
+    case nearby::sharing::Medium::kWifiDirect:
+      return "Wi-Fi Direct";
+    case nearby::sharing::Medium::kWifiLan:
+      return "Wi-Fi LAN";
+    case nearby::sharing::Medium::kWifiHotspot:
+      return "Wi-Fi Hotspot";
+    case nearby::sharing::Medium::kWebRtc:
+      return "WebRTC";
+    default:
+      return "Unknown";
+  }
 }
 
 std::string GenerateQrCodeUrl() {
@@ -284,8 +320,11 @@ class NearbySharingApi::Impl : public nearby::sharing::ShareTargetDiscoveredCall
     info.status = ToFacadeTransferStatus(transfer_metadata.status());
     info.progress = NormalizeFacadeProgress(transfer_metadata.progress());
     info.transferred_bytes = transfer_metadata.transferred_bytes();
+    info.total_bytes = static_cast<uint64_t>(attachment_container.GetTotalAttachmentsSize());
+    info.transfer_speed = transfer_metadata.transfer_speed();
     info.total_attachments = transfer_metadata.total_attachments_count();
     info.transferred_attachments = transfer_metadata.transferred_attachments_count();
+    info.connection_medium = MediumToString(service->GetUpgradedMedium(share_target.id));
     if (!attachment_container.GetFileAttachments().empty()) {
       const nearby::sharing::FileAttachment& file =
           attachment_container.GetFileAttachments().front();

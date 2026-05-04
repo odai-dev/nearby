@@ -70,6 +70,7 @@ cc_library(
         "//:__subpackages__",
         "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
         "//connections:partners",
+        "//sharing:__subpackages__",
     ],
     deps = [
         "//connections/implementation/proto:offline_wire_formats_cc_proto",
@@ -125,6 +126,7 @@ cc_library(
     visibility = [
         "//connections/implementation:__subpackages__",
         "//internal/platform/implementation:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         ":base",
@@ -165,6 +167,7 @@ cc_library(
         "//connections/implementation:__subpackages__",
         "//internal/platform/implementation:__subpackages__",
         "//presence:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         ":base",
@@ -356,6 +359,7 @@ cc_library(
     hdrs = ["mac_address.h"],
     visibility = [
         "//:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         "@com_google_absl//absl/strings",

@@ -27,6 +27,7 @@
 #include "sharing/attachment_container.h"
 #include "sharing/certificates/nearby_share_certificate_manager.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
+#include "sharing/nearby_connections_types.h"
 #include "sharing/nearby_sharing_settings.h"
 #include "sharing/share_target_discovered_callback.h"
 #include "sharing/transfer_update_callback.h"
@@ -225,6 +226,9 @@ class NearbySharingService {
   virtual Clock& GetClock() = 0;
   virtual void SetAlternateServiceUuidForDiscovery(
       uint16_t alternate_service_uuid) = 0;
+
+  // Returns the upgraded medium for the given share_target_id, if any.
+  virtual std::optional<Medium> GetUpgradedMedium(int64_t share_target_id) const = 0;
 };
 
 }  // namespace sharing

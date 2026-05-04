@@ -82,6 +82,24 @@ CreateWifiHotspotCredentials() {
   return credentials;
 }
 
+class TestBwuManager : public BwuManager {
+ public:
+  using BwuManager::BwuManager;
+
+  void SetMediumAvailability(Medium medium, bool available) {
+    medium_availability_[medium] = available;
+  }
+
+ protected:
+  bool IsMediumAvailable(Medium medium) const override {
+    auto item = medium_availability_.find(medium);
+    return item != medium_availability_.end() && item->second;
+  }
+
+ private:
+  absl::flat_hash_map<Medium, bool> medium_availability_;
+};
+
 class BwuManagerTest : public ::testing::Test {
  protected:
   BwuManagerTest() {
@@ -111,8 +129,14 @@ class BwuManagerTest : public ::testing::Test {
                                                     .wifi_hotspot = true,
                                                     .wifi_direct = true};
 
-    bwu_manager_ = std::make_unique<BwuManager>(mediums_, em_, ecm_,
-                                                std::move(handlers), config);
+    auto bwu_manager = std::make_unique<TestBwuManager>(
+        mediums_, em_, ecm_, std::move(handlers), config);
+    test_bwu_manager_ = bwu_manager.get();
+    test_bwu_manager_->SetMediumAvailability(Medium::WEB_RTC, true);
+    test_bwu_manager_->SetMediumAvailability(Medium::WIFI_LAN, true);
+    test_bwu_manager_->SetMediumAvailability(Medium::WIFI_DIRECT, true);
+    test_bwu_manager_->SetMediumAvailability(Medium::WIFI_HOTSPOT, true);
+    bwu_manager_ = std::move(bwu_manager);
 
     // Don't run tasks on other threads. Avoids race conditions in tests.
     bwu_manager_->MakeSingleThreadedForTesting();
@@ -208,6 +232,7 @@ class BwuManagerTest : public ::testing::Test {
   FakeBwuHandler* fake_wifi_lan_bwu_handler_ = nullptr;
   FakeBwuHandler* fake_wifi_direct_bwu_handler_ = nullptr;
   FakeBwuHandler* fake_wifi_hotspot_bwu_handler_ = nullptr;
+  TestBwuManager* test_bwu_manager_ = nullptr;
   std::unique_ptr<BwuManager> bwu_manager_;
   PacketMetaData packet_meta_data_;
 };
@@ -1012,11 +1037,50 @@ TEST_F(BwuManagerTest, InitiateBwu_Revert_OnDisconnect_Wlan) {
 }
 
 TEST_F(BwuManagerTest, OnReceiveBwuEvent) {
-  // TODO(b/235109434): Add more unit tests coverage for BWU module
+  FakeEndpointChannel* channel = CreateInitialEndpoint(
+      &client_, kServiceIdA, kEndpointId1, Medium::BLUETOOTH);
+  ASSERT_NE(channel, nullptr);
+
+  test_bwu_manager_->SetMediumAvailability(Medium::WEB_RTC, false);
+  test_bwu_manager_->SetMediumAvailability(Medium::WIFI_LAN, true);
+
+  ExceptionOr<OfflineFrame> retry_request = parser::FromBytes(
+      parser::ForBwuRetry({Medium::WIFI_LAN, Medium::WEB_RTC},
+                          /*is_request=*/true));
+  ASSERT_TRUE(retry_request.ok());
+  bwu_manager_->OnIncomingFrame(retry_request.result(), std::string(kEndpointId1),
+                                &client_, Medium::BLUETOOTH, packet_meta_data_);
+
+  ASSERT_FALSE(channel->written_data().empty());
+  ExceptionOr<OfflineFrame> retry_response =
+      parser::FromBytes(channel->written_data().back());
+  ASSERT_TRUE(retry_response.ok());
+  EXPECT_EQ(parser::GetFrameType(retry_response.result()),
+            V1Frame::BANDWIDTH_UPGRADE_RETRY);
+  const auto& retry_frame = retry_response.result().v1().bandwidth_upgrade_retry();
+  EXPECT_FALSE(retry_frame.is_request());
+  EXPECT_THAT(parser::BwuRetryMediumsToMediums(retry_frame),
+              testing::ElementsAre(Medium::WIFI_LAN));
+
+  UnRegisterChannelForEndpoint(kEndpointId1);
 }
 
 TEST_F(BwuManagerTest, OnProcessBwuEvent) {
-  // TODO(b/235109434): Add more unit tests coverage for BWU module
+  CreateInitialEndpoint(&client_, kServiceIdA, kEndpointId1, Medium::BLUETOOTH);
+
+  EXPECT_TRUE(fake_wifi_lan_bwu_handler_->handle_initialize_calls().empty());
+
+  ExceptionOr<OfflineFrame> retry_response = parser::FromBytes(
+      parser::ForBwuRetry({Medium::WIFI_LAN}, /*is_request=*/false));
+  ASSERT_TRUE(retry_response.ok());
+  bwu_manager_->OnIncomingFrame(retry_response.result(), std::string(kEndpointId1),
+                                &client_, Medium::BLUETOOTH, packet_meta_data_);
+
+  ASSERT_EQ(fake_wifi_lan_bwu_handler_->handle_initialize_calls().size(), 1u);
+  EXPECT_EQ(fake_wifi_lan_bwu_handler_->handle_initialize_calls()[0].endpoint_id,
+            kEndpointId1);
+
+  UnRegisterChannelForEndpoint(kEndpointId1);
 }
 
 TEST_F(BwuManagerTest, BlockBwuFrameBeforeAccept) {

@@ -17,8 +17,14 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <atomic>
+#include <cerrno>
+#include <cstring>
 #include <functional>
+#include <optional>
 
 #include <sdbus-c++/Types.h>
 
@@ -54,6 +60,7 @@ class TCPSocket {
     if (ret < 0) {
       LOG(ERROR) << __func__ << ": Error connecting to socket: "
                          << std::strerror(errno);
+      close(sock);
       return std::nullopt;
     }
 
@@ -64,7 +71,7 @@ class TCPSocket {
   OutputStream& GetOutputStream() { return output_stream_; }
 
   Exception Close() {
-    if (closed_) return {Exception::kFailed};
+    if (closed_) return {Exception::kSuccess};
 
     closed_ = true;
     input_stream_.Close();
@@ -94,6 +101,15 @@ class TCPServerSocket {
       return std::nullopt;
     }
 
+    int reuse_addr = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr,
+                   sizeof(reuse_addr)) < 0) {
+      LOG(ERROR) << __func__ << ": Error setting SO_REUSEADDR: "
+                 << std::strerror(errno);
+      close(sock);
+      return std::nullopt;
+    }
+
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -108,28 +124,40 @@ class TCPServerSocket {
     if (ret < 0) {
       LOG(ERROR) << __func__ << ": Error binding to socket: "
                          << std::strerror(errno);
+      close(sock);
       return std::nullopt;
     }
 
-    ret = listen(sock, 0);
+    ret = listen(sock, SOMAXCONN);
     if (ret < 0) {
       LOG(ERROR) << __func__ << ": Error listening on socket: "
                          << std::strerror(errno);
+      close(sock);
       return std::nullopt;
     }
 
     return TCPServerSocket(sock);
   }
   std::optional<TCPSocket> Accept() {
+    int server_fd = fd_.get();
+    if (server_fd < 0) {
+      return std::nullopt;
+    }
+
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
 
     auto conn =
-        accept(fd_.get(), reinterpret_cast<struct sockaddr*>(&addr), &len);
+        accept(server_fd, reinterpret_cast<struct sockaddr*>(&addr), &len);
     if (conn < 0) {
+      if (errno == EBADF || errno == EINVAL || errno == ENOTSOCK) {
+        VLOG(1) << __func__
+                << ": Server socket closed while waiting for Accept().";
+        return std::nullopt;
+      }
       LOG(ERROR) << __func__
                          << ": Error accepting incoming connections on socket "
-                         << fd_.get() << ": " << std::strerror(errno);
+                         << server_fd << ": " << std::strerror(errno);
       return std::nullopt;
     }
 
@@ -138,9 +166,17 @@ class TCPServerSocket {
 
   Exception Close() {
     int fd = fd_.release();
-    shutdown(fd, SHUT_RDWR);
+    if (fd < 0) {
+      return {Exception::kSuccess};
+    }
+    if (shutdown(fd, SHUT_RDWR) < 0 && errno != ENOTCONN && errno != EINVAL &&
+        errno != EBADF) {
+      VLOG(1) << __func__ << ": shutdown(" << fd
+              << ") failed: " << std::strerror(errno);
+    }
     auto ret = close(fd);
     if (ret < 0) {
+      if (errno == EBADF) return {Exception::kSuccess};
       LOG(ERROR) << __func__ << ": Error closing socket " << fd << ": "
                          << std::strerror(errno);
       return {Exception::kFailed};

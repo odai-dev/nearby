@@ -147,6 +147,10 @@ class BwuManager : public EndpointManager::FrameProcessor {
       const location::nearby::connections::BandwidthUpgradeNegotiationFrame
           frame,
       const string& endpoint_id);
+  void OnBwuRetryFrame(
+      ClientProxy* client,
+      const location::nearby::connections::BandwidthUpgradeRetryFrame& frame,
+      const std::string& endpoint_id);
 
   // Called to revert any state changed in the course of setting up the upgraded
   // medium for an endpoint.
@@ -226,6 +230,7 @@ class BwuManager : public EndpointManager::FrameProcessor {
 
   virtual const location::nearby::connections::OsInfo& GetLocalOsInfo(
       ClientProxy* client) const;
+  virtual bool IsMediumAvailable(Medium medium) const;
 
   bool is_single_threaded_for_testing_ = false;
 

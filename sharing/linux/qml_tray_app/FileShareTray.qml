@@ -47,7 +47,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: "#ffffff"
-                topLeftRadius: 48
+                radius: 48
                 clip: true
 
                 readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
@@ -102,6 +102,57 @@ ApplicationWindow {
                             }
                         }
 
+                    }
+                }
+
+                DropArea {
+                    anchors.fill: parent
+                    onEntered: (drag) => {
+                        if (drag.hasUrls) {
+                            drag.accept(Qt.LinkAction)
+                        }
+                    }
+                    onDropped: (drop) => {
+                        if (drop.hasUrls) {
+                            var path = drop.urls[0].toString()
+                            if (path.startsWith("file://")) {
+                                path = path.substring(7)
+                            }
+                            fileShareController.switchToSendModeWithFile(path)
+                            drop.accept()
+                        }
+                    }
+                    
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#10b981"
+                        opacity: parent.containsDrag ? 0.08 : 0
+                        border.color: "#10b981"
+                        border.width: parent.containsDrag ? 4 : 0
+                        radius: 48
+                        
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 12
+                            visible: parent.parent.containsDrag
+                            
+                            Label {
+                                text: "Drop to share"
+                                font.pixelSize: 24
+                                font.weight: Font.Bold
+                                color: "#065f46"
+                                anchors.horizontalCenter: parent.horizontalCenter
+                            }
+                            
+                            Label {
+                                text: "Release to select files"
+                                font.pixelSize: 16
+                                color: "#065f46"
+                                anchors.horizontalCenter: parent.horizontalCenter
+                            }
+                        }
                     }
                 }
             }

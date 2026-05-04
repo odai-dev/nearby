@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 
 Item {
     anchors.fill: parent
@@ -14,14 +13,21 @@ Item {
     readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
     readonly property var incomingTransfer: findIncomingTransfer()
     readonly property var incomingTarget: findTargetForTransfer(incomingTransfer)
+    readonly property string incomingTransferStatus: incomingTransfer
+                                                   ? String(incomingTransfer.status || "")
+                                                   : ""
+    readonly property string incomingTransferFileName: incomingTransfer
+                                                     ? String(incomingTransfer.fileName || "")
+                                                     : ""
     readonly property bool hasIncomingTransfer: incomingTransfer !== null
                                                && incomingTarget !== null
     readonly property bool isReceivingActive: hasIncomingTransfer
-                                              && String(incomingTransfer.status || "") !== "Complete"
+                                              && incomingTransferStatus !== "Complete"
     readonly property real receivingIntensity: {
         if (!isReceivingActive)
             return 0
-        var numeric = Number(incomingTransfer.progress)
+        var numeric = Number(incomingTransfer && incomingTransfer.progress !== undefined
+                             ? incomingTransfer.progress : 0)
         if (!isFinite(numeric) || numeric < 0)
             numeric = 0
         return Math.max(0.35, Math.min(1.0, numeric))
@@ -108,7 +114,7 @@ Item {
     // have a local path to open.
     function incomingClickReady() {
         return hasIncomingTransfer
-                && String(incomingTransfer.status || "") === "Complete"
+                && incomingTransferStatus === "Complete"
                 && String(incomingTransfer.filePath || "").length > 0
     }
 
@@ -331,7 +337,7 @@ Item {
         visible: !isSendMode && hasIncomingTransfer
                  && transferKey(incomingTransfer) !== dismissedTransferKey
         width: 200
-        height: 210
+        height: incomingTransferStatus === "AwaitingLocalConfirmation" ? 270 : 210
         radius: 34
         color: cardSurface
         border.color: cardBorder
@@ -353,7 +359,7 @@ Item {
 
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: incomingHeadline(String(incomingTransfer.status || ""))
+                text: incomingHeadline(incomingTransferStatus)
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
                 color: "#059669"
@@ -367,15 +373,62 @@ Item {
 
             Label {
                 width: parent.width
-                visible: String(incomingTransfer.fileName || "").length > 0
-                text: String(incomingTransfer.fileName || "")
+                visible: incomingTransferFileName.length > 0
+                text: incomingTransferFileName
                 font.pixelSize: 13
-                font.weight: Font.StyleItalic
+                font.italic: true
                 color: textPrimary
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+                visible: incomingTransferStatus === "AwaitingLocalConfirmation"
+
+                Button {
+                    text: "Reject"
+                    flat: true
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ef4444"
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitWidth: 64
+                        implicitHeight: 32
+                        color: parent.pressed ? "#fee2e2" : "transparent"
+                        border.color: "#fecaca"
+                        radius: 16
+                    }
+                    onClicked: fileShareController.rejectTransfer(incomingTransfer.targetId)
+                }
+
+                Button {
+                    text: "Accept"
+                    flat: true
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitWidth: 84
+                        implicitHeight: 32
+                        color: parent.pressed ? "#059669" : "#10b981"
+                        radius: 16
+                    }
+                    onClicked: fileShareController.acceptTransfer(incomingTransfer.targetId)
+                }
             }
         }
 
@@ -399,7 +452,7 @@ Item {
         if (transferKey(incomingTransfer) !== dismissedTransferKey)
             return
 
-        if (String(incomingTransfer.status || "") !== "Complete")
+        if (incomingTransferStatus !== "Complete")
             dismissedTransferKey = ""
     }
 
@@ -412,5 +465,34 @@ Item {
         text: fileShareController.statusMessage
         font.pixelSize: 13
         color: textMuted
+    }
+
+    Button {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 84
+        visible: !isSendMode
+        text: "Select files to send"
+        flat: true
+
+        contentItem: Text {
+            text: parent.text
+            color: "#059669"
+            font.pixelSize: 14
+            font.weight: Font.Medium
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        background: Rectangle {
+            implicitWidth: 160
+            implicitHeight: 40
+            color: parent.pressed ? "#e7faed" : "#f0fdf4"
+            border.color: "#34d399"
+            border.width: 1
+            radius: 20
+        }
+
+        onClicked: fileShareController.openFilePicker()
     }
 }
