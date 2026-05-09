@@ -5,11 +5,11 @@ import QtQuick.Layouts
 Item {
     anchors.fill: parent
 
-    readonly property color textPrimary: "#111827"
-    readonly property color textMuted: "#6b7280"
-    readonly property color textSoft: "#4b5563"
-    readonly property color cardSurface: "#ffffff"
-    readonly property color cardBorder: "#d1fae5"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
+    readonly property color textSoft: "#d4d4d8"
+    readonly property color cardSurface: "#1c1c1f"
+    readonly property color cardBorder: "#27272a"
     readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
     readonly property var incomingTransfer: findIncomingTransfer()
     readonly property var incomingTarget: findTargetForTransfer(incomingTransfer)
@@ -130,7 +130,8 @@ Item {
     }
     Canvas {
         id: blobCanvas3
-        width: 380; height: 380
+        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        height: width
         anchors.centerIn: parent
         visible: !isSendMode
 
@@ -162,7 +163,7 @@ Item {
 
             for (var i = 0; i < n; i++) {
                 var a = (i / n) * Math.PI * 2 - Math.PI / 2
-                var r = 150 + chaos * 22
+                var r = (width * 0.4) + chaos * 22
                     + Math.sin(a * 2 + t)               * (11 + chaos * 14)
                     + Math.cos(a * 3 - t * 0.2)         * (8 + chaos * 10)
                     + Math.sin(a * 1.5 + t * 0.7)       * (6 + chaos * 8)
@@ -189,7 +190,7 @@ Item {
             ctx.closePath()
 
             var grad = ctx.createRadialGradient(cx - 40, cy - 40, 0, cx, cy, 150)
-            grad.addColorStop(0, "#e7faed")
+            grad.addColorStop(0, "#064e3b")
             ctx.fillStyle = grad
             ctx.fill()
         }
@@ -197,7 +198,8 @@ Item {
 
     Canvas {
         id: blobCanvas2
-        width: 380; height: 380
+        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        height: width
         anchors.centerIn: parent
         visible: !isSendMode
 
@@ -229,7 +231,7 @@ Item {
 
             for (var i = 0; i < n; i++) {
                 var a = (i / n) * Math.PI * 2 - Math.PI / 2
-                var r = 140 + chaos * 18
+                var r = (width * 0.37) + chaos * 18
                     + Math.sin(a * 2 + t)               * (11 + chaos * 12)
                     + Math.cos(a * 3 - t * 0.8)         * (8 + chaos * 9)
                     + Math.sin(a * 1.5 + t * 0.23)      * (6 + chaos * 7)
@@ -256,7 +258,7 @@ Item {
             ctx.closePath()
 
             var grad = ctx.createRadialGradient(cx - 40, cy - 40, 0, cx, cy, 150)
-            grad.addColorStop(0, "#caeada")
+            grad.addColorStop(0, "#065f46")
             ctx.fillStyle = grad
             ctx.fill()
         }
@@ -266,7 +268,8 @@ Item {
 
     Canvas {
         id: blobCanvas
-        width: 380; height: 380
+        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        height: width
         anchors.centerIn: parent
         visible: !isSendMode
 
@@ -298,7 +301,7 @@ Item {
 
             for (var i = 0; i < n; i++) {
                 var a = (i / n) * Math.PI * 2 - Math.PI / 2
-                var r = 130 + chaos * 15
+                var r = (width * 0.34) + chaos * 15
                     + Math.sin(a * 2 + t)               * (11 + chaos * 15)
                     + Math.cos(a * 3 - t * 0.6)         * (8 + chaos * 12)
                     + Math.sin(a * 1.5 + t * 0.35)      * (6 + chaos * 9)
@@ -325,7 +328,7 @@ Item {
             ctx.closePath()
 
             var grad = ctx.createRadialGradient(cx - 40, cy - 40, 0, cx, cy, 150)
-            grad.addColorStop(0, "#acdac4")
+            grad.addColorStop(0, "#059669")
             ctx.fillStyle = grad
             ctx.fill()
         }
@@ -348,8 +351,8 @@ Item {
             anchors.fill: parent
             anchors.margins: 10
             radius: parent.radius - 10
-            color: "#ffffff"
-            opacity: 0.84
+            color: "#18181b"
+            opacity: 0.95
         }
 
         Column {
@@ -403,8 +406,8 @@ Item {
                     background: Rectangle {
                         implicitWidth: 64
                         implicitHeight: 32
-                        color: parent.pressed ? "#fee2e2" : "transparent"
-                        border.color: "#fecaca"
+                        color: parent.pressed ? "#450a0a" : "transparent"
+                        border.color: "#7f1d1d"
                         radius: 16
                     }
                     onClicked: fileShareController.rejectTransfer(incomingTransfer.targetId)
@@ -477,7 +480,7 @@ Item {
 
         contentItem: Text {
             text: parent.text
-            color: "#059669"
+            color: "#d1fae5"
             font.pixelSize: 14
             font.weight: Font.Medium
             horizontalAlignment: Text.AlignHCenter
@@ -487,8 +490,8 @@ Item {
         background: Rectangle {
             implicitWidth: 160
             implicitHeight: 40
-            color: parent.pressed ? "#e7faed" : "#f0fdf4"
-            border.color: "#34d399"
+            color: parent.pressed ? "#065f46" : "#064e3b"
+            border.color: "#10b981"
             border.width: 1
             radius: 20
         }

@@ -6,10 +6,10 @@ Item {
     Layout.preferredWidth: 280
     Layout.fillHeight: true
 
-    readonly property color surface: "#ffffff"
-    readonly property color cardBorder: "#bbf7d0"
-    readonly property color textPrimary: "#111827"
-    readonly property color textMuted: "#6b7280"
+    readonly property color surface: "#18181b"
+    readonly property color cardBorder: "#27272a"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
 
     ColumnLayout {
         anchors.fill: parent
@@ -35,8 +35,8 @@ Item {
                 Layout.fillWidth: true
                 height: 52
                 radius: 12
-                color: "#e8faf0"
-                border.color: cardBorder
+                color: "#1c1c1f"
+                border.color: "#3f3f46"
 
                 RowLayout {
                     anchors.fill: parent
@@ -132,8 +132,8 @@ Item {
             height: 40
             width: cancelLbl.implicitWidth + 24
             radius: 12
-            color: "#f3f4f6"
-            border.color: "#d1d5db"
+            color: "#27272a"
+            border.color: "#3f3f46"
 
             Label {
                 id: cancelLbl

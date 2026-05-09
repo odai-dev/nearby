@@ -8,9 +8,9 @@ Item {
 
     signal settingsRequested()
 
-    readonly property color textPrimary: "#111827"
-    readonly property color textMuted: "#6b7280"
-    readonly property color accent: "#16a34a"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
+    readonly property color accent: "#10b981"
 
     RowLayout {
         anchors.fill: parent
@@ -40,8 +40,8 @@ Item {
             width: 40
             height: 40
             radius: 12
-            color: settingsBtn.containsMouse ? "#dcfce7" : "transparent"
-            border.color: settingsBtn.containsMouse ? "#86efac" : "transparent"
+            color: settingsBtn.containsMouse ? "#064e3b" : "transparent"
+            border.color: settingsBtn.containsMouse ? "#10b981" : "transparent"
 
             Label {
                 anchors.centerIn: parent

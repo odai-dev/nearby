@@ -9,14 +9,14 @@ Item {
     width: 116
     height: deviceColumn.implicitHeight
 
-    readonly property color surface: "#ffffff"
-    readonly property color textPrimary: "#111827"
-    readonly property color textMuted: "#6b7280"
-    readonly property color avatarFill: "#dcfce7"
-    readonly property color avatarBorder: "#bbf7d0"
-    readonly property color ringBase: "#d1fae5"
+    readonly property color surface: "#1c1c1f"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
+    readonly property color avatarFill: "#27272a"
+    readonly property color avatarBorder: "#3f3f46"
+    readonly property color ringBase: "#3f3f46"
     readonly property color ringActive: "#10b981"
-    readonly property color ringComplete: "#16a34a"
+    readonly property color ringComplete: "#10b981"
     readonly property color ringFailed: "#ef4444"
     readonly property bool canSend: fileShareController.mode === "Send"
                                     && fileShareController.pendingSendFilePath.length > 0
@@ -251,7 +251,7 @@ Item {
             text: transferData ? transferData.connectionMedium : ""
             font.pixelSize: 10
             font.weight: Font.Medium
-            color: "#6b7280"
+            color: textMuted
         }
     }
 

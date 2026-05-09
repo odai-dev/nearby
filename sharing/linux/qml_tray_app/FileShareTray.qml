@@ -13,7 +13,7 @@ ApplicationWindow {
     visible: true
     title: "Quick Share"
 
-    background: Rectangle { color: "#f0fdf4" }
+    background: Rectangle { color: "#09090b" }
 
     onClosing: function(close) {
         close.accepted = false
@@ -46,9 +46,11 @@ ApplicationWindow {
                 id: mainContent
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "#ffffff"
+                color: "#18181b"
                 radius: 48
                 clip: true
+                border.color: "#27272a"
+                border.width: 1
 
                 readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
 
@@ -67,9 +69,9 @@ ApplicationWindow {
 
                     ColumnLayout {
                         id: mainCol
+                        width: parent.width - 96
                         x: 48
                         y: 48
-                        width: mainFlickable.width - 96
                         spacing: 16
 
                         SendUrlPanel {
@@ -82,7 +84,7 @@ ApplicationWindow {
                             text: "Nearby devices"
                             font.pixelSize: 20
                             font.weight: Font.Medium
-                            color: "#111827"
+                            color: "#fafafa"
                         }
 
                         Item {
@@ -106,6 +108,7 @@ ApplicationWindow {
                 }
 
                 DropArea {
+                    id: dropArea
                     anchors.fill: parent
                     onEntered: (drag) => {
                         if (drag.hasUrls) {
@@ -126,9 +129,9 @@ ApplicationWindow {
                     Rectangle {
                         anchors.fill: parent
                         color: "#10b981"
-                        opacity: parent.containsDrag ? 0.08 : 0
+                        opacity: dropArea.containsDrag ? 0.08 : 0
                         border.color: "#10b981"
-                        border.width: parent.containsDrag ? 4 : 0
+                        border.width: dropArea.containsDrag ? 4 : 0
                         radius: 48
                         
                         Behavior on opacity { NumberAnimation { duration: 150 } }
@@ -136,20 +139,20 @@ ApplicationWindow {
                         Column {
                             anchors.centerIn: parent
                             spacing: 12
-                            visible: parent.parent.containsDrag
+                            visible: dropArea.containsDrag
                             
                             Label {
                                 text: "Drop to share"
                                 font.pixelSize: 24
                                 font.weight: Font.Bold
-                                color: "#065f46"
+                                color: "#d1fae5"
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                             
                             Label {
                                 text: "Release to select files"
                                 font.pixelSize: 16
-                                color: "#065f46"
+                                color: "#a7f3d0"
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                         }

@@ -9,12 +9,13 @@ ColumnLayout {
     property var qrRows: fileShareController.qrCodeRows
     property int qrSize: fileShareController.qrCodeSize
     property string fileName: fileShareController.pendingSendFileName
-    readonly property color panelTint: "#ecfdf3"
-    readonly property color panelBorder: "#a7f3d0"
-    readonly property color qrPaper: "#fffdf7"
-    readonly property color qrInk: "#14532d"
-    readonly property color accentSoft: "#d1fae5"
-    readonly property color accentStrong: "#34d399"
+    readonly property color panelTint: "#18181b"
+    readonly property color panelBorder: "#27272a"
+    readonly property color qrPaper: "#fafafa"
+    readonly property color qrInk: "#09090b"
+    readonly property color accentSoft: "#064e3b"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
     readonly property bool compact: width < 360
     readonly property real qrFrameSize: 360
     readonly property real qrInnerSize: qrFrameSize - (compact ? 34 : 42)
@@ -27,7 +28,7 @@ ColumnLayout {
         text: "Scan to connect"
         font.pixelSize: compact ? 16 : 18
         font.weight: Font.DemiBold
-        color: "#111827"
+        color: root.textPrimary
     }
 
     Rectangle {
@@ -36,7 +37,7 @@ ColumnLayout {
         height: width
         radius: compact ? 24 : 32
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#f7fff9" }
+            GradientStop { position: 0.0; color: "#1c1c1f" }
             GradientStop { position: 1.0; color: root.panelTint }
         }
         border.color: root.panelBorder
@@ -59,7 +60,7 @@ ColumnLayout {
             height: width
             radius: compact ? 18 : 24
             color: root.qrPaper
-            border.color: "#dcfce7"
+            border.color: "#3f3f46"
             border.width: 1
 
             Canvas {
@@ -113,7 +114,7 @@ ColumnLayout {
                 visible: root.qrSize <= 0
                 text: "Preparing QR code..."
                 font.pixelSize: compact ? 12 : 13
-                color: "#6b7280"
+                color: root.textMuted
             }
         }
     }
@@ -122,7 +123,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         text: root.fileName.length > 0 ? "Sending: " + root.fileName : ""
         font.pixelSize: compact ? 12 : 13
-        color: "#6b7280"
+        color: root.textMuted
         visible: text.length > 0
     }
 

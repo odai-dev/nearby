@@ -10,13 +10,13 @@ Drawer {
     implicitWidth: 380
     implicitHeight: parent ? parent.height : 0
 
-    readonly property color bg: "#f0fdf4"
-    readonly property color surface: "#ffffff"
-    readonly property color accent: "#38aa62"
-    readonly property color accentLight: "#dcfce7"
-    readonly property color borderColor: "#bbf7d0"
-    readonly property color textPrimary: "#111827"
-    readonly property color textMuted: "#6b7280"
+    readonly property color bg: "#09090b"
+    readonly property color surface: "#18181b"
+    readonly property color accent: "#10b981"
+    readonly property color accentLight: "#064e3b"
+    readonly property color borderColor: "#27272a"
+    readonly property color textPrimary: "#fafafa"
+    readonly property color textMuted: "#a1a1aa"
 
     background: Rectangle { color: root.bg }
 
@@ -49,7 +49,7 @@ Drawer {
                     width: 32
                     height: 32
                     radius: 8
-                    color: closeArea.containsMouse ? "#f3f4f6" : "transparent"
+                    color: closeArea.containsMouse ? "#27272a" : "transparent"
 
                     Label {
                         anchors.centerIn: parent
@@ -222,7 +222,7 @@ Drawer {
         color: root.textPrimary
         background: Rectangle {
             radius: 8
-            color: "#f9fafb"
+            color: "#09090b"
             border.color: parent.activeFocus ? root.accent : root.borderColor
             border.width: parent.activeFocus ? 2 : 1
         }
