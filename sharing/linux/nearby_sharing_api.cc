@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <openssl/bn.h>
 #include <openssl/ec.h>
@@ -544,6 +545,66 @@ void NearbySharingApi::SendFile(int64_t share_target_id,
   nearby::sharing::FileAttachment attachment(path);
   attachment.set_size(static_cast<int64_t>(*file_size));
   builder.AddFileAttachment(std::move(attachment));
+  std::unique_ptr<nearby::sharing::AttachmentContainer> attachments =
+      builder.Build();
+  if (!attachments || !attachments->HasAttachments()) {
+    if (callback) {
+      callback(StatusCode::kInvalidArgument);
+    }
+    return;
+  }
+
+  impl_->service->SendAttachments(
+      share_target_id, std::move(attachments),
+      [cb = std::move(callback)](
+          nearby::sharing::NearbySharingService::StatusCodes status) mutable {
+        if (cb) {
+          cb(ToFacadeStatus(status));
+        }
+      });
+}
+
+void NearbySharingApi::SendFiles(int64_t share_target_id,
+                                 const std::vector<std::string>& file_paths,
+                                 std::function<void(StatusCode)> callback) {
+  if (impl_->service == nullptr) {
+    if (callback) {
+      callback(StatusCode::kError);
+    }
+    return;
+  }
+  if (file_paths.empty()) {
+    if (callback) {
+      callback(StatusCode::kInvalidArgument);
+    }
+    return;
+  }
+
+  nearby::sharing::AttachmentContainer::Builder builder;
+  for (const std::string& file_path : file_paths) {
+    if (file_path.empty()) {
+      if (callback) {
+        callback(StatusCode::kInvalidArgument);
+      }
+      return;
+    }
+
+    FilePath path(file_path);
+    std::optional<uintmax_t> file_size = nearby::Files::GetFileSize(path);
+    if (!file_size.has_value() || *file_size == 0 ||
+        *file_size >
+            static_cast<uintmax_t>(std::numeric_limits<int64_t>::max())) {
+      if (callback) {
+        callback(StatusCode::kInvalidArgument);
+      }
+      return;
+    }
+
+    nearby::sharing::FileAttachment attachment(path);
+    attachment.set_size(static_cast<int64_t>(*file_size));
+    builder.AddFileAttachment(std::move(attachment));
+  }
+
   std::unique_ptr<nearby::sharing::AttachmentContainer> attachments =
       builder.Build();
   if (!attachments || !attachments->HasAttachments()) {
