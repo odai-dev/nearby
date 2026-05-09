@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
+#include <QList>
 #include <QMenu>
 #include <QPainter>
 #include <QPalette>
@@ -13,8 +14,10 @@
 #include <QQmlError>
 #include <QQuickWindow>
 #include <QSettings>
+#include <QStringList>
 #include <QStyleHints>
 #include <QSystemTrayIcon>
+#include <QUrl>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -113,9 +116,24 @@ void LogQmlWarnings(const QList<QQmlError>& warnings) {
   }
 }
 
+QStringList LocalFilesFromUrls(const QList<QUrl>& urls) {
+  QStringList files;
+  for (const QUrl& url : urls) {
+    const QString file = url.toLocalFile();
+    if (!file.isEmpty()) {
+      files.append(file);
+    }
+  }
+  return files;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  // Use portal for file picker but don't force the whole platform theme
+  // to avoid breaking the system dark mode detection.
+  qputenv("QT_USE_PORTAL", "1");
+
   RedirectProcessLogsToConfiguredPath();
 
   QApplication app(argc, argv);
@@ -179,12 +197,17 @@ int main(int argc, char* argv[]) {
 
   QObject::connect(send_action, &QAction::triggered, window,
                    [&controller, window]() {
-                     const QString file = QFileDialog::getOpenFileName(
-                         nullptr, QStringLiteral("Select file to send"));
-                     if (file.isEmpty()) {
+                     const QList<QUrl> urls = QFileDialog::getOpenFileUrls(
+                         nullptr, QStringLiteral("Select files to send"),
+                         QUrl::fromLocalFile(QDir::homePath()), QStringLiteral("All Files (*)"));
+                     if (urls.isEmpty()) {
                        return;
                      }
-                     controller.switchToSendModeWithFile(file);
+                     const QStringList files = LocalFilesFromUrls(urls);
+                     if (files.isEmpty()) {
+                       return;
+                     }
+                     controller.switchToSendModeWithFiles(files);
                      window->show();
                      window->raise();
                      window->requestActivate();
@@ -231,10 +254,13 @@ int main(int argc, char* argv[]) {
 
   QObject::connect(&controller, &FileShareTrayController::requestFilePicker,
                    [&controller, window]() {
-                     const QString file = QFileDialog::getOpenFileName(
-                         nullptr, QStringLiteral("Select file to send"));
-                     if (!file.isEmpty()) {
-                       controller.switchToSendModeWithFile(file);
+                     // Using URLs can sometimes trigger the portal more reliably in Qt 6
+                     const QList<QUrl> urls = QFileDialog::getOpenFileUrls(
+                         nullptr, QStringLiteral("Select files to send"),
+                         QUrl::fromLocalFile(QDir::homePath()), QStringLiteral("All Files (*)"));
+                     const QStringList files = LocalFilesFromUrls(urls);
+                     if (!files.isEmpty()) {
+                       controller.switchToSendModeWithFiles(files);
                      }
                    });
 

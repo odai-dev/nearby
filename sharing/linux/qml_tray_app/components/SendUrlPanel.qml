@@ -8,7 +8,7 @@ ColumnLayout {
     property string urlText: fileShareController.qrCodeUrl
     property var qrRows: fileShareController.qrCodeRows
     property int qrSize: fileShareController.qrCodeSize
-    property string fileName: fileShareController.pendingSendFileName
+    property string fileSummary: fileShareController.pendingSendSummary
     readonly property color panelTint: "#18181b"
     readonly property color panelBorder: "#27272a"
     readonly property color qrPaper: "#fafafa"
@@ -121,7 +121,7 @@ ColumnLayout {
 
     Label {
         Layout.alignment: Qt.AlignHCenter
-        text: root.fileName.length > 0 ? "Sending: " + root.fileName : ""
+        text: root.fileSummary.length > 0 ? "Sending: " + root.fileSummary : ""
         font.pixelSize: compact ? 12 : 13
         color: root.textMuted
         visible: text.length > 0

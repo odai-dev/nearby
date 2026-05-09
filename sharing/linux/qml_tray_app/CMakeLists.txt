@@ -13,6 +13,8 @@ set(NEARBY_PREFIX "/usr/local" CACHE PATH "Install prefix for the Nearby shared 
 
 find_library(NEARBY_SHARING_LIB nearby_sharing_api_shared
   HINTS "${NEARBY_PREFIX}/lib" REQUIRED)
+get_filename_component(NEARBY_SHARING_LIB_DIR
+  "${NEARBY_SHARING_LIB}" DIRECTORY)
 
 find_path(NEARBY_SHARING_INCLUDE sharing/linux/nearby_sharing_api.h
   HINTS "${NEARBY_PREFIX}/include" REQUIRED)
@@ -66,7 +68,7 @@ target_link_libraries(nearby_qml_file_tray_app PRIVATE
 )
 
 set_target_properties(nearby_qml_file_tray_app PROPERTIES
-  BUILD_RPATH "${NEARBY_PREFIX}/lib"
+  BUILD_RPATH "${NEARBY_SHARING_LIB_DIR};${NEARBY_PREFIX}/lib"
   INSTALL_RPATH "$ORIGIN/../lib"
 )
 

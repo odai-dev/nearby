@@ -25,7 +25,7 @@ app for file sharing via Nearby Sharing, wired to:
 - Mode `Send`:
   - Starts discovery.
   - Shows discovered share targets.
-  - Sends the selected file to a chosen target.
+  - Sends the selected file or file batch to a chosen target.
 - Mode `Receive`:
   - Starts advertising.
   - Shows pending incoming transfer requests.

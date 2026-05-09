@@ -10,7 +10,7 @@ Item {
     readonly property color textSoft: "#d4d4d8"
     readonly property color cardSurface: "#1c1c1f"
     readonly property color cardBorder: "#27272a"
-    readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
+    readonly property bool isSendMode: fileShareController.pendingSendFileCount > 0
     readonly property var incomingTransfer: findIncomingTransfer()
     readonly property var incomingTarget: findTargetForTransfer(incomingTransfer)
     readonly property string incomingTransferStatus: incomingTransfer

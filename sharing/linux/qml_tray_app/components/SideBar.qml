@@ -18,7 +18,7 @@ Item {
 
         // Receive mode: visibility info
         ColumnLayout {
-            visible: fileShareController.pendingSendFilePath.length === 0
+            visible: fileShareController.pendingSendFileCount === 0
             Layout.fillWidth: true
             spacing: 0
 
@@ -72,7 +72,7 @@ Item {
 
         // Send mode: outbound file info
         ColumnLayout {
-            visible: fileShareController.pendingSendFilePath.length > 0
+            visible: fileShareController.pendingSendFileCount > 0
             Layout.fillWidth: true
             spacing: 0
 
@@ -80,7 +80,9 @@ Item {
                 Layout.leftMargin: 12
                 Layout.topMargin: 16
                 Layout.bottomMargin: 8
-                text: "Sharing 1 file"
+                text: fileShareController.pendingSendFileCount === 1
+                      ? "Sharing 1 file"
+                      : "Sharing " + fileShareController.pendingSendFileCount + " files"
                 font.weight: Font.Medium
                 color: textPrimary
             }
@@ -104,7 +106,7 @@ Item {
                 Layout.leftMargin: 12
                 Layout.topMargin: 8
                 Layout.rightMargin: 12
-                text: fileShareController.pendingSendFileName
+                text: fileShareController.pendingSendSummary
                 elide: Text.ElideRight
                 font.pixelSize: 13
                 color: textMuted
@@ -126,7 +128,7 @@ Item {
 
         // Cancel (only visible in send mode)
         Rectangle {
-            visible: fileShareController.pendingSendFilePath.length > 0
+            visible: fileShareController.pendingSendFileCount > 0
             Layout.leftMargin: 12
             Layout.bottomMargin: 12
             height: 40

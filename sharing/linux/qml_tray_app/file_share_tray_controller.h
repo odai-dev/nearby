@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <memory>
+#include <vector>
 
 #include "file_share_state.h"
 #include <sharing/linux/nearby_sharing_api.h>
@@ -17,6 +18,10 @@ class FileShareTrayController : public QObject {
   Q_PROPERTY(bool running READ running NOTIFY runningChanged)
   Q_PROPERTY(QString pendingSendFileName READ pendingSendFileName NOTIFY pendingSendFileNameChanged)
   Q_PROPERTY(QString pendingSendFilePath READ pendingSendFilePath NOTIFY pendingSendFilePathChanged)
+  Q_PROPERTY(QStringList pendingSendFileNames READ pendingSendFileNames NOTIFY pendingSendFilesChanged)
+  Q_PROPERTY(QStringList pendingSendFilePaths READ pendingSendFilePaths NOTIFY pendingSendFilesChanged)
+  Q_PROPERTY(int pendingSendFileCount READ pendingSendFileCount NOTIFY pendingSendFilesChanged)
+  Q_PROPERTY(QString pendingSendSummary READ pendingSendSummary NOTIFY pendingSendFilesChanged)
   Q_PROPERTY(QVariantList discoveredTargets READ discoveredTargets NOTIFY discoveredTargetsChanged)
   Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
   Q_PROPERTY(bool autoAcceptIncoming READ autoAcceptIncoming WRITE setAutoAcceptIncoming NOTIFY autoAcceptIncomingChanged)
@@ -37,6 +42,10 @@ class FileShareTrayController : public QObject {
   bool running() const { return state_.running(); }
   QString pendingSendFileName() const { return state_.pendingSendFileName(); }
   QString pendingSendFilePath() const { return state_.pendingSendFilePath(); }
+  QStringList pendingSendFileNames() const { return state_.pendingSendFileNames(); }
+  QStringList pendingSendFilePaths() const { return state_.pendingSendFilePaths(); }
+  int pendingSendFileCount() const { return state_.pendingSendFileCount(); }
+  QString pendingSendSummary() const { return state_.pendingSendSummary(); }
   QVariantList discoveredTargets() const { return state_.discoveredTargets(); }
   QVariantList transfers() const { return state_.transfers(); }
   bool autoAcceptIncoming() const { return state_.autoAcceptIncoming(); }
@@ -56,7 +65,10 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void stop();
   Q_INVOKABLE void switchToReceiveMode();
   Q_INVOKABLE void switchToSendModeWithFile(const QString& file_path);
+  Q_INVOKABLE void switchToSendModeWithFiles(const QStringList& file_paths);
+  Q_INVOKABLE void switchToSendModeWithUrls(const QVariantList& urls);
   Q_INVOKABLE void sendPendingFileToTarget(qlonglong share_target_id);
+  Q_INVOKABLE void sendPendingFilesToTarget(qlonglong share_target_id);
   Q_INVOKABLE void copyTextToClipboard(const QString& text);
   Q_INVOKABLE void openFileLocation(const QString& file_path);
   Q_INVOKABLE void clearTransfers();
@@ -72,6 +84,7 @@ class FileShareTrayController : public QObject {
   void runningChanged();
   void pendingSendFileNameChanged();
   void pendingSendFilePathChanged();
+  void pendingSendFilesChanged();
   void discoveredTargetsChanged();
   void transfersChanged();
   void autoAcceptIncomingChanged();
@@ -91,6 +104,13 @@ class FileShareTrayController : public QObject {
   void loadSettings();
   void saveSettings() const;
   void updateQrCodeData();
+  bool normalizeFileSelection(const QStringList& file_paths, QStringList* normalized_paths,
+                              QStringList* file_names) const;
+  QStringList localPathsFromUrlValues(const QVariantList& urls) const;
+  std::vector<std::string> pendingSendFilePathsForApi() const;
+  void clearPendingSendState();
+  void emitPendingSendStateChanged();
+  QString transferFileSummary(const NearbySharingApi::TransferUpdateInfo& update) const;
 
   void startSendMode();
   void startReceiveMode();

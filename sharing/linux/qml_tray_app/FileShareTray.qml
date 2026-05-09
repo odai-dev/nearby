@@ -52,7 +52,7 @@ ApplicationWindow {
                 border.color: "#27272a"
                 border.width: 1
 
-                readonly property bool isSendMode: fileShareController.pendingSendFilePath.length > 0
+                readonly property bool isSendMode: fileShareController.pendingSendFileCount > 0
 
                 // ── Idle: animated blob ───────────────────────────────────
                 AnimatedBlob { visible: !mainContent.isSendMode }
@@ -117,11 +117,7 @@ ApplicationWindow {
                     }
                     onDropped: (drop) => {
                         if (drop.hasUrls) {
-                            var path = drop.urls[0].toString()
-                            if (path.startsWith("file://")) {
-                                path = path.substring(7)
-                            }
-                            fileShareController.switchToSendModeWithFile(path)
+                            fileShareController.switchToSendModeWithUrls(drop.urls)
                             drop.accept()
                         }
                     }

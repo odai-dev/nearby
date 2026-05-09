@@ -18,8 +18,8 @@ Item {
     readonly property color ringActive: "#10b981"
     readonly property color ringComplete: "#10b981"
     readonly property color ringFailed: "#ef4444"
-    readonly property bool canSend: fileShareController.mode === "Send"
-                                    && fileShareController.pendingSendFilePath.length > 0
+    property bool canSend: fileShareController.mode === "Send"
+                                    && fileShareController.pendingSendFileCount > 0
 
     readonly property string targetName: modelData && modelData.name && modelData.name.length > 0
                                          ? modelData.name : "Unknown device"
@@ -195,7 +195,7 @@ Item {
                 anchors.fill: parent
                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 enabled: canSend
-                onClicked: fileShareController.sendPendingFileToTarget(modelData.id)
+                onClicked: fileShareController.sendPendingFilesToTarget(modelData.id)
             }
         }
 

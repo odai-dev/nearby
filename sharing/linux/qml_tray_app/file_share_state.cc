@@ -3,6 +3,28 @@
 
 FileShareState::FileShareState() = default;
 
+QString FileShareState::pendingSendSummary() const {
+  if (pending_send_file_names_.isEmpty()) {
+    return {};
+  }
+  if (pending_send_file_names_.size() == 1) {
+    return pending_send_file_names_.first();
+  }
+  return QStringLiteral("%1 files").arg(pending_send_file_names_.size());
+}
+
+void FileShareState::SetPendingSendFiles(const QStringList& file_paths,
+                                         const QStringList& file_names,
+                                         qlonglong target_id) {
+  pending_send_file_paths_ = file_paths;
+  pending_send_file_names_ = file_names;
+  pending_send_file_path_ =
+      pending_send_file_paths_.isEmpty() ? QString() : pending_send_file_paths_.first();
+  pending_send_file_name_ =
+      pending_send_file_names_.isEmpty() ? QString() : pending_send_file_names_.first();
+  pending_send_target_id_ = target_id;
+}
+
 void FileShareState::AddOrUpdateTarget(qlonglong id, const QString& name,
                                        bool is_incoming) {
   target_names_[id] = name;
@@ -68,7 +90,8 @@ void FileShareState::AddOrUpdateTransfer(
     double progress, qulonglong transferred_bytes, qulonglong total_bytes,
     qulonglong transfer_speed, const QString& connection_medium,
     const QString& direction, const QString& file_name,
-    const QString& file_path) {
+    const QString& file_path, int total_attachments,
+    int transferred_attachments) {
   QVariantMap transfer{
       {QStringLiteral("targetId"), target_id},
       {QStringLiteral("targetName"), target_name},
@@ -81,6 +104,8 @@ void FileShareState::AddOrUpdateTransfer(
       {QStringLiteral("direction"), direction},
       {QStringLiteral("fileName"), file_name},
       {QStringLiteral("filePath"), file_path},
+      {QStringLiteral("totalAttachments"), total_attachments},
+      {QStringLiteral("transferredAttachments"), transferred_attachments},
   };
 
   if (transfer_row_by_target_.contains(target_id)) {
