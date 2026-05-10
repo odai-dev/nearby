@@ -226,6 +226,9 @@ Item {
             font.pixelSize: compact ? 11 : 12
             font.weight: Font.Medium
             color: "#10b981"
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 1
         }
 
         Label {
@@ -236,6 +239,9 @@ Item {
             text: transferData ? formatTransferSize(transferData.transferredBytes, transferData.totalBytes) : ""
             font.pixelSize: compact ? 10 : 11
             color: textMuted
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 1
         }
 
         Label {
@@ -246,6 +252,9 @@ Item {
             text: transferData ? formatBytes(transferData.transferSpeed) + "/s" : ""
             font.pixelSize: compact ? 10 : 11
             color: textMuted
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 1
         }
 
         Label {
@@ -257,6 +266,9 @@ Item {
             font.pixelSize: compact ? 9 : 10
             font.weight: Font.Medium
             color: textMuted
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 1
         }
     }
 

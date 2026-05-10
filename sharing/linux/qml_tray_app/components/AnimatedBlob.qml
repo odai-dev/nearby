@@ -361,13 +361,16 @@ Item {
                  && transferKey(incomingTransfer) !== dismissedTransferKey
         width: Math.max(200, Math.min(compact ? 220 : 240,
                                       parent.width - root.contentPadding * 2))
-        height: incomingTransferStatus === "AwaitingLocalConfirmation"
-                ? (compact ? 252 : 270)
-                : (compact ? 196 : 210)
+        height: Math.max(incomingTransferStatus === "AwaitingLocalConfirmation"
+                         ? (compact ? 252 : 270)
+                         : (compact ? 196 : 210),
+                         incomingTransferContent.implicitHeight
+                         + (compact ? 32 : 48))
         radius: compact ? 28 : 34
         color: cardSurface
         border.color: cardBorder
         border.width: 1
+        clip: true
         z: 10
 
         Rectangle {
@@ -379,6 +382,7 @@ Item {
         }
 
         Column {
+            id: incomingTransferContent
             anchors.fill: parent
             anchors.margins: compact ? 16 : 24
             spacing: compact ? 8 : 10
