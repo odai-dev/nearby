@@ -8,10 +8,24 @@ ApplicationWindow {
     id: root
     width: 980
     height: 760
-    minimumWidth: 820
-    minimumHeight: 620
+    minimumWidth: 480
+    minimumHeight: 520
     visible: true
     title: "Quick Share"
+    flags: Qt.Window
+           | Qt.WindowTitleHint
+           | Qt.WindowSystemMenuHint
+           | Qt.WindowMinimizeButtonHint
+           | Qt.WindowMaximizeButtonHint
+           | Qt.WindowCloseButtonHint
+
+    readonly property bool narrow: width < 760
+    readonly property bool compact: width < 620 || height < 600
+    readonly property int headerHeight: compact ? 64 : 80
+    readonly property int contentPadding: Math.round(Math.max(20, Math.min(48, width * 0.05)))
+    readonly property int panelRadius: Math.round(Math.max(24, Math.min(48, width * 0.045)))
+    readonly property int deviceSpacing: compact ? 12 : 20
+    readonly property int inlineSidebarWidth: Math.round(Math.max(220, Math.min(280, width * 0.3)))
 
     background: Rectangle { color: "#09090b" }
 
@@ -21,8 +35,34 @@ ApplicationWindow {
         fileShareController.hideToTray()
     }
 
+    onNarrowChanged: {
+        if (!narrow)
+            sideBarDrawer.close()
+    }
+
     SettingsPanel {
         id: settingsPanel
+    }
+
+    Drawer {
+        id: sideBarDrawer
+        edge: Qt.LeftEdge
+        width: Math.min(root.width, Math.max(300, root.width * 0.78))
+        height: root.height
+        modal: true
+        interactive: root.narrow
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: "#09090b"
+            border.color: "#27272a"
+        }
+
+        SideBar {
+            anchors.fill: parent
+            compact: true
+            drawerMode: true
+        }
     }
 
     ColumnLayout {
@@ -30,61 +70,74 @@ ApplicationWindow {
         spacing: 0
 
         AppHeader {
+            compact: root.compact
+            height: root.headerHeight
+            showSidebarButton: root.narrow
+            onSidebarRequested: sideBarDrawer.open()
             onSettingsRequested: settingsPanel.open()
         }
 
-        // ── Body ─────────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
 
-            SideBar {}
+            SideBar {
+                visible: !root.narrow
+                compact: root.compact
+                drawerMode: false
+                Layout.preferredWidth: visible ? root.inlineSidebarWidth : 0
+            }
 
-            // ── Main content (white panel) ────────────────────────────────
             Rectangle {
                 id: mainContent
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: "#18181b"
-                radius: 48
+                radius: root.panelRadius
                 clip: true
                 border.color: "#27272a"
                 border.width: 1
 
                 readonly property bool isSendMode: fileShareController.pendingSendFileCount > 0
 
-                // ── Idle: animated blob ───────────────────────────────────
-                AnimatedBlob { visible: !mainContent.isSendMode }
+                AnimatedBlob {
+                    visible: !mainContent.isSendMode
+                    compact: root.compact
+                    contentPadding: root.contentPadding
+                }
 
-                // ── Non-idle: scrollable device + transfer cards ──────────
                 Flickable {
                     id: mainFlickable
                     anchors.fill: parent
                     clip: true
                     visible: mainContent.isSendMode
                     contentWidth: width
-                    contentHeight: mainCol.implicitHeight + 96
+                    contentHeight: Math.max(height, mainCol.implicitHeight + root.contentPadding * 2)
+                    boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
 
                     ColumnLayout {
                         id: mainCol
-                        width: parent.width - 96
-                        x: 48
-                        y: 48
-                        spacing: 16
+                        width: Math.max(0, parent.width - root.contentPadding * 2)
+                        x: root.contentPadding
+                        y: root.contentPadding
+                        spacing: root.compact ? 12 : 16
 
                         SendUrlPanel {
                             Layout.alignment: Qt.AlignHCenter
-                            width: Math.max(240, Math.min(mainCol.width, 420))
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 420
+                            compact: root.compact || mainCol.width < 360
                         }
 
-
                         Label {
+                            Layout.fillWidth: true
                             text: "Nearby devices"
-                            font.pixelSize: 20
+                            font.pixelSize: root.compact ? 18 : 20
                             font.weight: Font.Medium
                             color: "#fafafa"
+                            elide: Text.ElideRight
                         }
 
                         Item {
@@ -95,15 +148,16 @@ ApplicationWindow {
                             Flow {
                                 id: deviceFlow
                                 width: parent.width
-                                spacing: 20
+                                spacing: root.deviceSpacing
 
                                 Repeater {
                                     model: fileShareController.discoveredTargets
-                                    delegate: DeviceCard {}
+                                    delegate: DeviceCard {
+                                        compact: root.compact || mainCol.width < 520
+                                    }
                                 }
                             }
                         }
-
                     }
                 }
 
@@ -128,18 +182,18 @@ ApplicationWindow {
                         opacity: dropArea.containsDrag ? 0.08 : 0
                         border.color: "#10b981"
                         border.width: dropArea.containsDrag ? 4 : 0
-                        radius: 48
+                        radius: root.panelRadius
                         
                         Behavior on opacity { NumberAnimation { duration: 150 } }
 
                         Column {
                             anchors.centerIn: parent
-                            spacing: 12
+                            spacing: root.compact ? 8 : 12
                             visible: dropArea.containsDrag
                             
                             Label {
                                 text: "Drop to share"
-                                font.pixelSize: 24
+                                font.pixelSize: root.compact ? 20 : 24
                                 font.weight: Font.Bold
                                 color: "#d1fae5"
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -147,7 +201,7 @@ ApplicationWindow {
                             
                             Label {
                                 text: "Release to select files"
-                                font.pixelSize: 16
+                                font.pixelSize: root.compact ? 13 : 16
                                 color: "#a7f3d0"
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }

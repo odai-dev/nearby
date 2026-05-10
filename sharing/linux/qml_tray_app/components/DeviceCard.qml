@@ -5,8 +5,9 @@ import QtQuick.Layouts
 Item {
     id: root
     required property var modelData
+    property bool compact: false
 
-    width: 116
+    width: compact ? 96 : 116
     height: deviceColumn.implicitHeight
 
     readonly property color surface: "#1c1c1f"
@@ -18,6 +19,10 @@ Item {
     readonly property color ringActive: "#10b981"
     readonly property color ringComplete: "#10b981"
     readonly property color ringFailed: "#ef4444"
+    readonly property int avatarSize: compact ? 70 : 84
+    readonly property int avatarInset: compact ? 8 : 9
+    readonly property int checkSize: compact ? 24 : 28
+    readonly property int ringLineWidth: compact ? 4 : 5
     property bool canSend: fileShareController.mode === "Send"
                                     && fileShareController.pendingSendFileCount > 0
 
@@ -91,13 +96,13 @@ Item {
         id: deviceColumn
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width
-        spacing: 10
+        spacing: compact ? 8 : 10
 
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: 84
-            height: 84
-            radius: 42
+            width: root.avatarSize
+            height: root.avatarSize
+            radius: width / 2
             color: surface
             opacity: canSend ? 1.0 : 0.5
 
@@ -113,7 +118,7 @@ Item {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
 
-                    var lineWidth = 5
+                    var lineWidth = root.ringLineWidth
                     var radius = (Math.min(width, height) - lineWidth) / 2
                     var center = width / 2
 
@@ -145,14 +150,14 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: 9
+                anchors.margins: root.avatarInset
                 radius: width / 2
                 color: avatarFill
 
                 Label {
                     anchors.centerIn: parent
                     text: initialLetter(targetName)
-                    font.pixelSize: 28
+                    font.pixelSize: compact ? 24 : 28
                     font.weight: Font.DemiBold
                     color: textPrimary
                 }
@@ -160,7 +165,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: 9
+                anchors.margins: root.avatarInset
                 radius: width / 2
                 color: "#16a34a"
                 opacity: showCompletionTick ? 0.94 : 0.0
@@ -172,8 +177,8 @@ Item {
 
                 Canvas {
                     anchors.centerIn: parent
-                    width: 28
-                    height: 28
+                    width: root.checkSize
+                    height: root.checkSize
 
                     onPaint: {
                         var ctx = getContext("2d")
@@ -204,7 +209,7 @@ Item {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: targetName
-            font.pixelSize: 13
+            font.pixelSize: compact ? 12 : 13
             font.weight: Font.Bold
             elide: Text.ElideRight
             maximumLineCount: 2
@@ -218,7 +223,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             visible: isTransferActive && !isConnecting && transferData && transferData.totalBytes > 0
             text: Math.floor(transferProgress * 100) + "%"
-            font.pixelSize: 12
+            font.pixelSize: compact ? 11 : 12
             font.weight: Font.Medium
             color: "#10b981"
         }
@@ -229,7 +234,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             visible: isTransferActive && !isConnecting && transferData && transferData.totalBytes > 0
             text: transferData ? formatTransferSize(transferData.transferredBytes, transferData.totalBytes) : ""
-            font.pixelSize: 11
+            font.pixelSize: compact ? 10 : 11
             color: textMuted
         }
 
@@ -239,7 +244,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             visible: isTransferActive && !isConnecting && transferData && transferData.transferSpeed > 0
             text: transferData ? formatBytes(transferData.transferSpeed) + "/s" : ""
-            font.pixelSize: 11
+            font.pixelSize: compact ? 10 : 11
             color: textMuted
         }
 
@@ -249,7 +254,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             visible: isTransferActive && transferData && transferData.connectionMedium.length > 0
             text: transferData ? transferData.connectionMedium : ""
-            font.pixelSize: 10
+            font.pixelSize: compact ? 9 : 10
             font.weight: Font.Medium
             color: textMuted
         }
@@ -265,6 +270,7 @@ Item {
     onTransferDataChanged: progressRing.requestPaint()
     onTransferProgressChanged: progressRing.requestPaint()
     onRingColorChanged: progressRing.requestPaint()
+    onCompactChanged: progressRing.requestPaint()
     onIsConnectingChanged: {
         if (!isConnecting)
             progressRing.rotation = 0

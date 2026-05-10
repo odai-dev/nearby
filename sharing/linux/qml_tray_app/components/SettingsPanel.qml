@@ -5,9 +5,9 @@ import QtQuick.Layouts
 Drawer {
     id: root
     edge: Qt.RightEdge
-    width: 380
+    width: parent ? Math.min(380, parent.width) : 380
     height: parent ? parent.height : 0
-    implicitWidth: 380
+    implicitWidth: width
     implicitHeight: parent ? parent.height : 0
 
     readonly property color bg: "#09090b"
@@ -17,6 +17,8 @@ Drawer {
     readonly property color borderColor: "#27272a"
     readonly property color textPrimary: "#fafafa"
     readonly property color textMuted: "#a1a1aa"
+    readonly property bool compact: width < 360
+    readonly property int sideMargin: compact ? 14 : 20
 
     background: Rectangle { color: root.bg }
 
@@ -33,21 +35,21 @@ Drawer {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
+                anchors.leftMargin: root.sideMargin
+                anchors.rightMargin: root.sideMargin
 
                 Label {
                     text: "Settings"
-                    font.pixelSize: 20
+                    font.pixelSize: compact ? 18 : 20
                     font.weight: Font.Bold
                     color: root.textPrimary
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                 }
 
-                Item { Layout.fillWidth: true }
-
                 Rectangle {
-                    width: 32
-                    height: 32
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
                     radius: 8
                     color: closeArea.containsMouse ? "#27272a" : "transparent"
 
@@ -73,17 +75,18 @@ Drawer {
             id: flick
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: false
+            clip: true
             contentWidth: width
-            contentHeight: settingsCol.height + 32
+            contentHeight: settingsCol.implicitHeight + root.sideMargin * 2
+            boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
 
             Column {
                 id: settingsCol
-                x: 20
-                y: 20
-                width: flick.width - 40
-                spacing: 20
+                x: root.sideMargin
+                y: root.sideMargin
+                width: Math.max(0, flick.width - root.sideMargin * 2)
+                spacing: compact ? 16 : 20
 
                 SectionLabel { text: "DEVICE" }
                 SectionCard {
@@ -103,7 +106,8 @@ Drawer {
                                 text: "Device name"
                                 font.pixelSize: 13
                                 color: root.textMuted
-                                Layout.preferredWidth: 110
+                                Layout.preferredWidth: compact ? 92 : 110
+                                elide: Text.ElideRight
                             }
                             ThemedField {
                                 text: fileShareController.deviceName
@@ -182,7 +186,8 @@ Drawer {
                                 text: "Log path"
                                 font.pixelSize: 13
                                 color: root.textMuted
-                                Layout.preferredWidth: 110
+                                Layout.preferredWidth: compact ? 92 : 110
+                                elide: Text.ElideRight
                             }
                             ThemedField {
                                 font.pixelSize: 11

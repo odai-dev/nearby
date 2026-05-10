@@ -16,19 +16,23 @@ ColumnLayout {
     readonly property color accentSoft: "#064e3b"
     readonly property color textPrimary: "#fafafa"
     readonly property color textMuted: "#a1a1aa"
-    readonly property bool compact: width < 360
-    readonly property real qrFrameSize: 360
-    readonly property real qrInnerSize: qrFrameSize - (compact ? 34 : 42)
+    property bool compact: width < 360
+    readonly property real qrFrameSize: Math.max(200, Math.min(360, width))
+    readonly property real qrInnerSize: Math.max(0, qrFrameSize - (compact ? 34 : 42))
 
     spacing: compact ? 14 : 18
     implicitWidth: 420
+    Layout.minimumWidth: 0
 
     Label {
         Layout.alignment: Qt.AlignHCenter
+        Layout.fillWidth: true
         text: "Scan to connect"
         font.pixelSize: compact ? 16 : 18
         font.weight: Font.DemiBold
         color: root.textPrimary
+        horizontalAlignment: Text.AlignHCenter
+        elide: Text.ElideRight
     }
 
     Rectangle {
@@ -121,10 +125,15 @@ ColumnLayout {
 
     Label {
         Layout.alignment: Qt.AlignHCenter
+        Layout.fillWidth: true
         text: root.fileSummary.length > 0 ? "Sending: " + root.fileSummary : ""
         font.pixelSize: compact ? 12 : 13
         color: root.textMuted
         visible: text.length > 0
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        maximumLineCount: 2
+        elide: Text.ElideRight
     }
 
     onQrRowsChanged: qrCanvas.requestPaint()

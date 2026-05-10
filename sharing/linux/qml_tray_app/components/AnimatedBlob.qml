@@ -3,7 +3,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 Item {
+    id: root
     anchors.fill: parent
+
+    property bool compact: false
+    property int contentPadding: 48
 
     readonly property color textPrimary: "#fafafa"
     readonly property color textMuted: "#a1a1aa"
@@ -23,6 +27,11 @@ Item {
                                                && incomingTarget !== null
     readonly property bool isReceivingActive: hasIncomingTransfer
                                               && incomingTransferStatus !== "Complete"
+    readonly property real actionAreaHeight: compact ? 96 : 116
+    readonly property real availableBlobHeight: Math.max(120, height - actionAreaHeight - contentPadding * 2)
+    readonly property real blobSize: Math.max(150, Math.min(width * 0.76,
+                                                            availableBlobHeight * 0.82,
+                                                            compact ? 280 : 380))
     readonly property real receivingIntensity: {
         if (!isReceivingActive)
             return 0
@@ -119,20 +128,28 @@ Item {
     }
 
     Label {
-        x: 48; y: 48
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: root.contentPadding
+        anchors.topMargin: root.contentPadding
+        width: Math.max(0, parent.width - root.contentPadding * 2)
         visible: fileShareController.running
         text: isSendMode
               ? "Ready to send"
               : "Ready to receive"
-        font.pixelSize: 20
+        font.pixelSize: compact ? 18 : 20
         font.weight: Font.Medium
         color: textPrimary
+        elide: Text.ElideRight
+        maximumLineCount: 1
     }
+
     Canvas {
         id: blobCanvas3
-        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        width: root.blobSize
         height: width
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: compact ? -28 : -24
         visible: !isSendMode
 
         property real t: 0
@@ -198,9 +215,10 @@ Item {
 
     Canvas {
         id: blobCanvas2
-        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        width: root.blobSize
         height: width
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: compact ? -28 : -24
         visible: !isSendMode
 
         property real t: 0
@@ -268,9 +286,10 @@ Item {
 
     Canvas {
         id: blobCanvas
-        width: Math.min(parent ? parent.width * 0.8 : 380, parent ? parent.height * 0.8 : 380, 380)
+        width: root.blobSize
         height: width
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: compact ? -28 : -24
         visible: !isSendMode
 
         property real t: 0
@@ -337,11 +356,15 @@ Item {
     Rectangle {
         id: incomingTransferCard
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: compact ? -28 : -24
         visible: !isSendMode && hasIncomingTransfer
                  && transferKey(incomingTransfer) !== dismissedTransferKey
-        width: 200
-        height: incomingTransferStatus === "AwaitingLocalConfirmation" ? 270 : 210
-        radius: 34
+        width: Math.max(200, Math.min(compact ? 220 : 240,
+                                      parent.width - root.contentPadding * 2))
+        height: incomingTransferStatus === "AwaitingLocalConfirmation"
+                ? (compact ? 252 : 270)
+                : (compact ? 196 : 210)
+        radius: compact ? 28 : 34
         color: cardSurface
         border.color: cardBorder
         border.width: 1
@@ -357,13 +380,13 @@ Item {
 
         Column {
             anchors.fill: parent
-            anchors.margins: 24
-            spacing: 10
+            anchors.margins: compact ? 16 : 24
+            spacing: compact ? 8 : 10
 
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: incomingHeadline(incomingTransferStatus)
-                font.pixelSize: 12
+                font.pixelSize: compact ? 11 : 12
                 font.weight: Font.DemiBold
                 color: "#059669"
                 horizontalAlignment: Text.AlignHCenter
@@ -372,13 +395,14 @@ Item {
             DeviceCard {
                 anchors.horizontalCenter: parent.horizontalCenter
                 modelData: incomingTarget
+                compact: root.compact
             }
 
             Label {
                 width: parent.width
                 visible: incomingTransferFileName.length > 0
                 text: incomingTransferFileName
-                font.pixelSize: 13
+                font.pixelSize: compact ? 12 : 13
                 font.italic: true
                 color: textPrimary
                 wrapMode: Text.Wrap
@@ -389,7 +413,7 @@ Item {
 
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 12
+                spacing: compact ? 8 : 12
                 visible: incomingTransferStatus === "AwaitingLocalConfirmation"
 
                 Button {
@@ -398,7 +422,7 @@ Item {
                     contentItem: Text {
                         text: parent.text
                         color: "#ef4444"
-                        font.pixelSize: 13
+                        font.pixelSize: compact ? 12 : 13
                         font.weight: Font.Medium
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -419,7 +443,7 @@ Item {
                     contentItem: Text {
                         text: parent.text
                         color: "#ffffff"
-                        font.pixelSize: 13
+                        font.pixelSize: compact ? 12 : 13
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -460,42 +484,51 @@ Item {
     }
 
 
-    Label {
+    Column {
+        id: bottomActions
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 48
+        anchors.bottomMargin: compact ? 20 : 48
+        width: Math.max(0, parent.width - root.contentPadding * 2)
         visible: !isSendMode
-        text: fileShareController.statusMessage
-        font.pixelSize: 13
-        color: textMuted
-    }
+        spacing: compact ? 10 : 16
 
-    Button {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 84
-        visible: !isSendMode
-        text: "Select files to send"
-        flat: true
+        Button {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "Select files to send"
+            flat: true
 
-        contentItem: Text {
-            text: parent.text
-            color: "#d1fae5"
-            font.pixelSize: 14
-            font.weight: Font.Medium
+            contentItem: Text {
+                text: parent.text
+                color: "#d1fae5"
+                font.pixelSize: compact ? 13 : 14
+                font.weight: Font.Medium
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+
+            background: Rectangle {
+                implicitWidth: compact ? 148 : 160
+                implicitHeight: compact ? 38 : 40
+                color: parent.pressed ? "#065f46" : "#064e3b"
+                border.color: "#10b981"
+                border.width: 1
+                radius: height / 2
+            }
+
+            onClicked: fileShareController.openFilePicker()
+        }
+
+        Label {
+            width: parent.width
+            text: fileShareController.statusMessage
+            font.pixelSize: compact ? 12 : 13
+            color: textMuted
             horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
         }
-
-        background: Rectangle {
-            implicitWidth: 160
-            implicitHeight: 40
-            color: parent.pressed ? "#065f46" : "#064e3b"
-            border.color: "#10b981"
-            border.width: 1
-            radius: 20
-        }
-
-        onClicked: fileShareController.openFilePicker()
     }
 }
