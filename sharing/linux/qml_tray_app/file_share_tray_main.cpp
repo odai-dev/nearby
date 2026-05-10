@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPalette>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlError>
@@ -127,6 +128,10 @@ QStringList LocalFilesFromUrls(const QList<QUrl>& urls) {
   return files;
 }
 
+bool ShouldStartHidden(const QStringList& arguments) {
+  return arguments.contains(QStringLiteral("--start-hidden"));
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -138,6 +143,9 @@ int main(int argc, char* argv[]) {
 
   QApplication app(argc, argv);
   app.setQuitOnLastWindowClosed(false);
+  QGuiApplication::setDesktopFileName(QStringLiteral("nearby-file-share"));
+  app.setWindowIcon(QIcon(QStringLiteral(":/icons/nearby-linux-desktop.png")));
+  const bool start_hidden = ShouldStartHidden(app.arguments());
 
   if (!QSystemTrayIcon::isSystemTrayAvailable()) {
     qWarning() << "System tray is unavailable. The app will keep running, "
@@ -152,6 +160,7 @@ int main(int argc, char* argv[]) {
                      LogQmlWarnings(warnings);
                    });
   engine.rootContext()->setContextProperty("fileShareController", &controller);
+  engine.rootContext()->setContextProperty("startHidden", start_hidden);
   engine.load(QUrl(QStringLiteral("qrc:/qml/FileShareTray.qml")));
   if (engine.rootObjects().isEmpty()) {
     qCritical() << "Failed to load FileShareTray.qml. Check the log for missing "
@@ -165,19 +174,23 @@ int main(int argc, char* argv[]) {
     qCritical() << "QML loaded, but the root object is not a QQuickWindow.";
     return 1;
   }
+  window->setIcon(app.windowIcon());
 
   const auto resolve_tray_icon = [&app]() {
-    const QColor symbolic_color = app.palette().color(QPalette::WindowText);
-    QIcon tray_icon = BuildTintedSymbolicIcon(
-        QStringLiteral(":/icons/tray_icon-symbolic.svg"), symbolic_color);
+    QIcon tray_icon(QStringLiteral(":/icons/nearby-linux-desktop.png"));
     if (tray_icon.isNull()) {
-      tray_icon = QIcon::fromTheme(QStringLiteral("network-wireless-symbolic"));
+      tray_icon = app.windowIcon();
+    }
+    if (tray_icon.isNull()) {
+      const QColor symbolic_color = app.palette().color(QPalette::WindowText);
+      tray_icon = BuildTintedSymbolicIcon(
+          QStringLiteral(":/icons/tray_icon-symbolic.svg"), symbolic_color);
     }
     if (tray_icon.isNull()) {
       tray_icon = QIcon(QStringLiteral(":/icons/tray_icon.png"));
     }
     if (tray_icon.isNull()) {
-      tray_icon = app.windowIcon();
+      tray_icon = QIcon::fromTheme(QStringLiteral("network-wireless-symbolic"));
     }
     return tray_icon;
   };

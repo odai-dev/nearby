@@ -165,6 +165,21 @@ Drawer {
                                 onToggled: fileShareController.enable5GhzHotspot = checked
                             }
                         }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Label {
+                                Layout.fillWidth: true
+                                color: root.textPrimary
+                                font.pixelSize: 13
+                                text: "Start at login"
+                            }
+                            ThemedToggle {
+                                checked: fileShareController.startOnLogin
+                                onToggled: fileShareController.startOnLogin = checked
+                            }
+                        }
                     }
                 }
 

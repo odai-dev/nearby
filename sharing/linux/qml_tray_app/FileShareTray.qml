@@ -10,7 +10,7 @@ ApplicationWindow {
     height: 760
     minimumWidth: 480
     minimumHeight: 520
-    visible: true
+    visible: !startHidden
     title: "Quick Share"
     flags: Qt.Window
            | Qt.WindowTitleHint

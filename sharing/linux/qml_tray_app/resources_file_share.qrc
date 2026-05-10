@@ -9,6 +9,7 @@
     <file>components/SettingsPanel.qml</file>
   </qresource>
   <qresource prefix="/icons">
+    <file>nearby-linux-desktop.png</file>
     <file>tray_icon.png</file>
     <file alias="tray_icon-symbolic.svg">tray_icon-symbolic.svg</file>
   </qresource>

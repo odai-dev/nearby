@@ -4,13 +4,17 @@
 #include <vector>
 
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QMetaObject>
+#include <QSaveFile>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QSysInfo>
 #include <QTimer>
 #include <QUrl>
@@ -19,6 +23,53 @@
 #include "string_utils.h"
 #include "status_mapper.h"
 #include "qr_code_generator.h"
+
+namespace {
+
+constexpr char kAutostartFileName[] = "nearby-file-share.desktop";
+
+QString AutostartDirectoryPath() {
+  const QString config_path =
+      QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+  if (config_path.isEmpty()) {
+    return QDir::home().filePath(QStringLiteral(".config/autostart"));
+  }
+  return QDir(config_path).filePath(QStringLiteral("autostart"));
+}
+
+QString AutostartFilePath() {
+  return QDir(AutostartDirectoryPath())
+      .filePath(QString::fromLatin1(kAutostartFileName));
+}
+
+QString EscapeDesktopExecArgument(const QString& argument) {
+  QString escaped = argument;
+  escaped.replace(QStringLiteral("\\"), QStringLiteral("\\\\"));
+  escaped.replace(QStringLiteral("\""), QStringLiteral("\\\""));
+  escaped.replace(QStringLiteral("`"), QStringLiteral("\\`"));
+  escaped.replace(QStringLiteral("$"), QStringLiteral("\\$"));
+  return QStringLiteral("\"%1\"").arg(escaped);
+}
+
+QString AutostartDesktopEntry() {
+  const QString executable =
+      QFileInfo(QCoreApplication::applicationFilePath()).absoluteFilePath();
+  return QStringLiteral(
+             "[Desktop Entry]\n"
+             "Type=Application\n"
+             "Name=Nearby File Share\n"
+             "Comment=Share files with nearby devices using Nearby Connections\n"
+             "Exec=%1 --start-hidden\n"
+             "Icon=nearby-file-share\n"
+             "Categories=Utility;Network;FileTransfer;\n"
+             "Keywords=share;file;nearby;transfer;\n"
+             "StartupNotify=false\n"
+             "Terminal=false\n"
+             "X-GNOME-Autostart-enabled=true\n")
+      .arg(EscapeDesktopExecArgument(executable));
+}
+
+}  // namespace
 
 FileShareTrayController::FileShareTrayController(QObject* parent)
     : QObject(parent) {
@@ -333,6 +384,10 @@ void FileShareTrayController::loadSettings() {
       settings.value(QStringLiteral("enable5GhzHotspot"), true).toBool();
   state_.SetEnable5GhzHotspot(stored_enable_5ghz_hotspot);
 
+  const bool stored_start_on_login =
+      settings.value(QStringLiteral("startOnLogin"), false).toBool();
+  state_.SetStartOnLogin(stored_start_on_login);
+
   const QString stored_log_path =
       settings.value(QStringLiteral("logPath"), QStringLiteral("/tmp/nearby_qml_file_tray.log"))
           .toString()
@@ -348,6 +403,7 @@ void FileShareTrayController::saveSettings() const {
   settings.setValue(QStringLiteral("autoAcceptIncoming"), state_.autoAcceptIncoming());
   settings.setValue(QStringLiteral("enable5GhzHotspot"),
                     state_.enable5GhzHotspot());
+  settings.setValue(QStringLiteral("startOnLogin"), state_.startOnLogin());
   settings.setValue(QStringLiteral("logPath"), state_.logPath());
 }
 
@@ -389,6 +445,27 @@ void FileShareTrayController::setEnable5GhzHotspot(bool enabled) {
   emit enable5GhzHotspotChanged();
 }
 
+void FileShareTrayController::setStartOnLogin(bool enabled) {
+  if (enabled == state_.startOnLogin()) {
+    return;
+  }
+
+  QString error_message;
+  if (!applyAutostartSetting(enabled, &error_message)) {
+    emit startOnLoginChanged();
+    emit requestTrayMessage(
+        QStringLiteral("Startup setting failed"),
+        error_message.isEmpty()
+            ? QStringLiteral("Could not update the login startup shortcut.")
+            : error_message);
+    return;
+  }
+
+  state_.SetStartOnLogin(enabled);
+  saveSettings();
+  emit startOnLoginChanged();
+}
+
 void FileShareTrayController::setLogPath(const QString& path) {
   const QString trimmed = path.trimmed();
   if (trimmed.isEmpty() || trimmed == state_.logPath()) {
@@ -397,6 +474,63 @@ void FileShareTrayController::setLogPath(const QString& path) {
   state_.SetLogPath(trimmed);
   saveSettings();
   emit logPathChanged();
+}
+
+bool FileShareTrayController::applyAutostartSetting(
+    bool enabled, QString* error_message) const {
+  const QString autostart_file_path = AutostartFilePath();
+
+  if (!enabled) {
+    if (!QFile::exists(autostart_file_path)) {
+      return true;
+    }
+    if (QFile::remove(autostart_file_path)) {
+      return true;
+    }
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("Could not remove %1.")
+                           .arg(autostart_file_path);
+    }
+    return false;
+  }
+
+  QDir autostart_dir(AutostartDirectoryPath());
+  if (!autostart_dir.exists() &&
+      !autostart_dir.mkpath(QStringLiteral("."))) {
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("Could not create %1.")
+                           .arg(autostart_dir.absolutePath());
+    }
+    return false;
+  }
+
+  QSaveFile file(autostart_file_path);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("Could not write %1.")
+                           .arg(autostart_file_path);
+    }
+    return false;
+  }
+
+  const QByteArray contents = AutostartDesktopEntry().toUtf8();
+  if (file.write(contents) != contents.size()) {
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("Could not write %1.")
+                           .arg(autostart_file_path);
+    }
+    return false;
+  }
+
+  if (!file.commit()) {
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("Could not save %1.")
+                           .arg(autostart_file_path);
+    }
+    return false;
+  }
+
+  return true;
 }
 
 void FileShareTrayController::start() {
@@ -689,6 +823,8 @@ void FileShareTrayController::notifyStateChange(const QString& property) {
     emit autoAcceptIncomingChanged();
   } else if (property == QStringLiteral("enable5GhzHotspot")) {
     emit enable5GhzHotspotChanged();
+  } else if (property == QStringLiteral("startOnLogin")) {
+    emit startOnLoginChanged();
   } else if (property == QStringLiteral("discoveredTargets")) {
     emit discoveredTargetsChanged();
   } else if (property == QStringLiteral("transfers")) {
