@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 DBus Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 DBus Network Test)
 
 # Where the Bazel-built Nearby .so and header were installed
 set(NEARBY_PREFIX "/usr/local" CACHE PATH "Install prefix for the Nearby shared library")
@@ -62,6 +62,7 @@ target_include_directories(nearby_qml_file_tray_app PRIVATE "${NEARBY_SHARING_IN
 
 target_link_libraries(nearby_qml_file_tray_app PRIVATE
   Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
+  Qt6::Network
   "${QRENCODE_LIB}"
   "${NEARBY_SHARING_LIB}"
   "${SDBUS_CPP_LIB}"

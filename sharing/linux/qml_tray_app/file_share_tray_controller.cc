@@ -516,16 +516,18 @@ void FileShareTrayController::handleTransferUpdate(
   if (previous_status != status &&
       update.status ==
           NearbySharingApi::TransferStatus::kAwaitingLocalConfirmation &&
-      update.is_incoming) {
+      update.is_incoming && !state_.autoAcceptIncoming()) {
+    const QString title = QStringLiteral("Incoming transfer");
+    const QString body =
+        QStringLiteral("%1 wants to share %2").arg(name, file_name);
     QVariantList actions;
     actions.append(QVariantMap{{QStringLiteral("key"), QStringLiteral("accept")},
                                {QStringLiteral("label"), QStringLiteral("Accept")}});
     actions.append(QVariantMap{{QStringLiteral("key"), QStringLiteral("reject")},
                                {QStringLiteral("label"), QStringLiteral("Reject")}});
-    emit requestActionableTrayMessage(
-        QStringLiteral("Incoming transfer"),
-        QStringLiteral("%1 wants to share %2").arg(name, file_name),
-        update.share_target_id, QString(), actions);
+    emit requestActionableTrayMessage(title, body, update.share_target_id,
+                                      QString(), actions);
+    emit requestIncomingConfirmationPrompt(title, body, update.share_target_id);
   } else if (previous_status != status && !update.is_incoming &&
              !StatusMapper::IsFinalTransferStatus(update.status) &&
              status != QStringLiteral("Unknown")) {

@@ -1,4 +1,6 @@
 #include <QAction>
+#include <QAbstractButton>
+#include <QAbstractSocket>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -6,13 +8,17 @@
 #include <QFileInfo>
 #include <QIcon>
 #include <QList>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPalette>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlError>
+#include <QPushButton>
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStringList>
@@ -21,6 +27,7 @@
 #include <QUrl>
 
 #include <fcntl.h>
+#include <memory>
 #include <unistd.h>
 
 #include "file_share_tray_controller.h"
@@ -29,6 +36,7 @@
 namespace {
 
 constexpr char kDefaultLogPath[] = "/tmp/nearby_qml_file_tray.log";
+constexpr char kInstanceServerName[] = "nearby-qml-file-tray-app";
 
 bool EnsureLogDirectory(const QString& file_path) {
   const QFileInfo file_info(file_path);
@@ -132,6 +140,40 @@ bool ShouldStartHidden(const QStringList& arguments) {
   return arguments.contains(QStringLiteral("--start-hidden"));
 }
 
+bool NotifyExistingInstance() {
+  QLocalSocket socket;
+  socket.connectToServer(QString::fromLatin1(kInstanceServerName),
+                         QIODevice::WriteOnly);
+  if (!socket.waitForConnected(250)) {
+    return false;
+  }
+
+  socket.write("show");
+  socket.flush();
+  socket.waitForBytesWritten(250);
+  socket.disconnectFromServer();
+  return true;
+}
+
+std::unique_ptr<QLocalServer> CreateSingleInstanceServer() {
+  auto server = std::make_unique<QLocalServer>();
+  const QString server_name = QString::fromLatin1(kInstanceServerName);
+  if (server->listen(server_name)) {
+    return server;
+  }
+
+  if (server->serverError() == QAbstractSocket::AddressInUseError) {
+    QLocalServer::removeServer(server_name);
+    if (server->listen(server_name)) {
+      return server;
+    }
+  }
+
+  qWarning().noquote()
+      << "Could not create single-instance server:" << server->errorString();
+  return nullptr;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -145,11 +187,18 @@ int main(int argc, char* argv[]) {
   app.setQuitOnLastWindowClosed(false);
   QGuiApplication::setDesktopFileName(QStringLiteral("nearby-file-share"));
   app.setWindowIcon(QIcon(QStringLiteral(":/icons/nearby-linux-desktop.png")));
-  const bool start_hidden = ShouldStartHidden(app.arguments());
+  if (NotifyExistingInstance()) {
+    return 0;
+  }
 
-  if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-    qWarning() << "System tray is unavailable. The app will keep running, "
-                  "but tray interactions may not work in this session.";
+  std::unique_ptr<QLocalServer> single_instance_server =
+      CreateSingleInstanceServer();
+  const bool tray_available = QSystemTrayIcon::isSystemTrayAvailable();
+  const bool start_hidden = ShouldStartHidden(app.arguments()) && tray_available;
+
+  if (!tray_available) {
+    qWarning() << "System tray is unavailable. Starting with the main window "
+                  "visible so the app remains reachable.";
   }
 
   FileShareTrayController controller;
@@ -161,6 +210,7 @@ int main(int argc, char* argv[]) {
                    });
   engine.rootContext()->setContextProperty("fileShareController", &controller);
   engine.rootContext()->setContextProperty("startHidden", start_hidden);
+  engine.rootContext()->setContextProperty("trayAvailable", tray_available);
   engine.load(QUrl(QStringLiteral("qrc:/qml/FileShareTray.qml")));
   if (engine.rootObjects().isEmpty()) {
     qCritical() << "Failed to load FileShareTray.qml. Check the log for missing "
@@ -175,6 +225,26 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   window->setIcon(app.windowIcon());
+
+  const auto showAndActivateWindow = [window]() {
+    window->show();
+    window->raise();
+    window->requestActivate();
+  };
+
+  if (single_instance_server != nullptr) {
+    QObject::connect(single_instance_server.get(), &QLocalServer::newConnection,
+                     window, [server = single_instance_server.get(),
+                              showAndActivateWindow]() {
+                       while (QLocalSocket* socket =
+                                  server->nextPendingConnection()) {
+                         socket->readAll();
+                         socket->disconnectFromServer();
+                         socket->deleteLater();
+                       }
+                       showAndActivateWindow();
+                     });
+  }
 
   const auto resolve_tray_icon = [&app]() {
     QIcon tray_icon(QStringLiteral(":/icons/nearby-linux-desktop.png"));
@@ -205,11 +275,12 @@ int main(int argc, char* argv[]) {
   tray_menu.addSeparator();
   QAction* show_action = tray_menu.addAction(QStringLiteral("Show"));
   QAction* hide_action = tray_menu.addAction(QStringLiteral("Hide"));
+  hide_action->setEnabled(tray_available);
   tray_menu.addSeparator();
   QAction* quit_action = tray_menu.addAction(QStringLiteral("Quit"));
 
   QObject::connect(send_action, &QAction::triggered, window,
-                   [&controller, window]() {
+                   [&controller, showAndActivateWindow]() {
                      const QList<QUrl> urls = QFileDialog::getOpenFileUrls(
                          nullptr, QStringLiteral("Select files to send"),
                          QUrl::fromLocalFile(QDir::homePath()), QStringLiteral("All Files (*)"));
@@ -221,24 +292,17 @@ int main(int argc, char* argv[]) {
                        return;
                      }
                      controller.switchToSendModeWithFiles(files);
-                     window->show();
-                     window->raise();
-                     window->requestActivate();
+                     showAndActivateWindow();
                    });
 
   QObject::connect(receive_action, &QAction::triggered,
-                   [&controller, window]() {
+                   [&controller, showAndActivateWindow]() {
                      controller.switchToReceiveMode();
-                     window->show();
-                     window->raise();
-                     window->requestActivate();
+                     showAndActivateWindow();
                    });
 
-  QObject::connect(show_action, &QAction::triggered, window, [window]() {
-    window->show();
-    window->raise();
-    window->requestActivate();
-  });
+  QObject::connect(show_action, &QAction::triggered, window,
+                   showAndActivateWindow);
 
   QObject::connect(hide_action, &QAction::triggered, window, [window]() {
     window->hide();
@@ -251,7 +315,8 @@ int main(int argc, char* argv[]) {
                    });
 
   QObject::connect(&tray, &QSystemTrayIcon::activated, window,
-                   [window](QSystemTrayIcon::ActivationReason reason) {
+                   [window, showAndActivateWindow](
+                       QSystemTrayIcon::ActivationReason reason) {
                      if (reason != QSystemTrayIcon::Trigger &&
                          reason != QSystemTrayIcon::DoubleClick) {
                        return;
@@ -259,9 +324,7 @@ int main(int argc, char* argv[]) {
                      if (window->isVisible()) {
                        window->hide();
                      } else {
-                       window->show();
-                       window->raise();
-                       window->requestActivate();
+                       showAndActivateWindow();
                      }
                    });
 
@@ -310,6 +373,49 @@ int main(int argc, char* argv[]) {
                    &NotificationManager::notificationActionRequested,
                    &controller,
                    &FileShareTrayController::handleNotificationAction);
+  QObject::connect(&controller,
+                   &FileShareTrayController::requestIncomingConfirmationPrompt,
+                   window,
+                   [&controller, window, &app, showAndActivateWindow](
+                       const QString& title, const QString& body,
+                       qlonglong share_target_id) {
+                     if (window->isVisible()) {
+                       showAndActivateWindow();
+                       return;
+                     }
+
+                     auto* message_box = new QMessageBox(
+                         QMessageBox::Question, title, body,
+                         QMessageBox::NoButton);
+                     message_box->setAttribute(Qt::WA_DeleteOnClose);
+                     message_box->setTextFormat(Qt::PlainText);
+                     message_box->setWindowFlag(Qt::WindowStaysOnTopHint);
+                     if (!app.windowIcon().isNull()) {
+                       message_box->setWindowIcon(app.windowIcon());
+                     }
+
+                     QAbstractButton* reject_button =
+                         message_box->addButton(QStringLiteral("Reject"),
+                                                QMessageBox::RejectRole);
+                     QAbstractButton* accept_button =
+                         message_box->addButton(QStringLiteral("Accept"),
+                                                QMessageBox::AcceptRole);
+                     QObject::connect(
+                         message_box, &QMessageBox::buttonClicked,
+                         message_box,
+                         [&controller, message_box, accept_button,
+                          reject_button, share_target_id](QAbstractButton* button) {
+                           if (button == accept_button) {
+                             controller.acceptTransfer(share_target_id);
+                           } else if (button == reject_button) {
+                             controller.rejectTransfer(share_target_id);
+                           }
+                           message_box->close();
+                         });
+                     message_box->show();
+                     message_box->raise();
+                     message_box->activateWindow();
+                   });
 
   QObject::connect(&app, &QCoreApplication::aboutToQuit, &controller,
                    [&controller]() { controller.stop(); });
@@ -321,11 +427,13 @@ int main(int argc, char* argv[]) {
 #endif
 
   tray.setContextMenu(&tray_menu);
-  tray.show();
+  if (tray_available) {
+    tray.show();
+  } else {
+    showAndActivateWindow();
+  }
 
   controller.start();
-  //controller.
-  controller.switchToReceiveMode();
 
   return app.exec();
 }

@@ -67,6 +67,8 @@ struct FakeServiceState {
   int shutdown_calls = 0;
   int set_hotspot_calls = 0;
   qlonglong last_send_target_id = 0;
+  qlonglong last_accept_target_id = 0;
+  qlonglong last_reject_target_id = 0;
   qlonglong last_cancel_target_id = 0;
   std::vector<std::string> last_sent_files;
   std::string last_sent_text;
@@ -139,15 +141,19 @@ class FakeSharingService final : public NearbySharingServiceInterface {
     }
   }
 
-  void Accept(qlonglong, std::function<void(StatusCode)> callback) override {
+  void Accept(qlonglong share_target_id,
+              std::function<void(StatusCode)> callback) override {
     ++state_->accept_calls;
+    state_->last_accept_target_id = share_target_id;
     if (callback) {
       callback(state_->accept_status);
     }
   }
 
-  void Reject(qlonglong, std::function<void(StatusCode)> callback) override {
+  void Reject(qlonglong share_target_id,
+              std::function<void(StatusCode)> callback) override {
     ++state_->reject_calls;
+    state_->last_reject_target_id = share_target_id;
     if (callback) {
       callback(state_->reject_status);
     }
@@ -622,11 +628,14 @@ class FileShareTrayControllerTest : public QObject {
              QStringLiteral("Receive folder is not valid"));
   }
 
-  void incomingConfirmationEmitsActionableNotificationAndHandlerAccepts() {
+  void incomingConfirmationEmitsNotificationPromptAndHandlersAcceptReject() {
     auto controller = CreateController();
     auto service = services_.back();
     QSignalSpy actionable_messages(
         controller.get(), &FileShareTrayController::requestActionableTrayMessage);
+    QSignalSpy confirmation_prompts(
+        controller.get(),
+        &FileShareTrayController::requestIncomingConfirmationPrompt);
 
     NearbySharingApi::TransferUpdateInfo update;
     update.share_target_id = 88;
@@ -638,8 +647,41 @@ class FileShareTrayControllerTest : public QObject {
     service->listener.transfer_update_cb(update);
 
     QTRY_COMPARE(actionable_messages.count(), 1);
+    QTRY_COMPARE(confirmation_prompts.count(), 1);
+    QCOMPARE(confirmation_prompts.at(0).at(2).toLongLong(), 88);
+
     controller->handleNotificationAction(QStringLiteral("accept"), 88, {});
     QTRY_COMPARE(service->accept_calls, 1);
+    QCOMPARE(service->last_accept_target_id, 88);
+
+    controller->handleNotificationAction(QStringLiteral("reject"), 88, {});
+    QTRY_COMPARE(service->reject_calls, 1);
+    QCOMPARE(service->last_reject_target_id, 88);
+  }
+
+  void incomingConfirmationAutoAcceptSkipsUserPrompt() {
+    auto controller = CreateController();
+    auto service = services_.back();
+    controller->setAutoAcceptIncoming(true);
+    QSignalSpy actionable_messages(
+        controller.get(), &FileShareTrayController::requestActionableTrayMessage);
+    QSignalSpy confirmation_prompts(
+        controller.get(),
+        &FileShareTrayController::requestIncomingConfirmationPrompt);
+
+    NearbySharingApi::TransferUpdateInfo update;
+    update.share_target_id = 88;
+    update.device_name = "Phone";
+    update.is_incoming = true;
+    update.status = NearbySharingApi::TransferStatus::kAwaitingLocalConfirmation;
+    update.first_file_name = "hello.txt";
+    update.total_attachments = 1;
+    service->listener.transfer_update_cb(update);
+
+    QCOMPARE(actionable_messages.count(), 0);
+    QCOMPARE(confirmation_prompts.count(), 0);
+    QTRY_COMPARE(service->accept_calls, 1);
+    QCOMPARE(service->last_accept_target_id, 88);
   }
 
   void targetRemovalPreservesCompletedTransferContext() {

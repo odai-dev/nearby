@@ -35,9 +35,14 @@ ApplicationWindow {
     }
 
     onClosing: function(close) {
-        close.accepted = false
-        root.hide()
-        fileShareController.hideToTray()
+        if (trayAvailable) {
+            close.accepted = false
+            root.hide()
+            fileShareController.hideToTray()
+        } else {
+            close.accepted = true
+            Qt.quit()
+        }
     }
 
     onNarrowChanged: {

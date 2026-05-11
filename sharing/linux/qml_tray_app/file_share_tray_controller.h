@@ -178,6 +178,9 @@ class FileShareTrayController : public QObject {
                                     qlonglong share_target_id,
                                     const QString& file_path,
                                     const QVariantList& actions);
+  void requestIncomingConfirmationPrompt(const QString& title,
+                                         const QString& body,
+                                         qlonglong share_target_id);
 
  private:
   void initializeService();
