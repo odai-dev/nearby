@@ -47,7 +47,7 @@ check_service_hint() {
 
   if ! systemctl is-active --quiet "$unit"; then
     echo "Warning: $description ($unit) is not active right now." >&2
-    echo "Nearby File Share needs it running for discovery and fast transfers." >&2
+    echo "Quick Share needs it running for discovery and fast transfers." >&2
   fi
 }
 
@@ -55,7 +55,7 @@ usage() {
   cat <<'USAGE'
 Usage: ./install_nearby_file_share.sh [options]
 
-Install Nearby File Share app artifacts from an extracted release bundle.
+Install Quick Share app artifacts from an extracted release bundle.
 
 Options:
   --user          Install under $HOME/.local (default)
@@ -117,8 +117,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_SRC="$SCRIPT_DIR/bin/nearby_qml_file_tray_app"
 LIB_SRC="$SCRIPT_DIR/lib/libnearby_sharing_api_shared.so"
 SDBUS_LIB_SRC="$SCRIPT_DIR/lib/libsdbus-c++.so.2"
-DESKTOP_SRC="$SCRIPT_DIR/share/applications/nearby-file-share.desktop"
-ICON_SRC_STAGED="$SCRIPT_DIR/share/icons/hicolor/256x256/apps/nearby-file-share.png"
+DESKTOP_SRC="$SCRIPT_DIR/share/applications/quick-share.desktop"
+ICON_SRC_STAGED="$SCRIPT_DIR/share/icons/hicolor/256x256/apps/quick-share.png"
 ICON_SRC_FALLBACK="$SCRIPT_DIR/nearby-linux-desktop.png"
 ICON_SRC="$ICON_SRC_STAGED"
 if [[ ! -f "$ICON_SRC" && -f "$ICON_SRC_FALLBACK" ]]; then
@@ -177,7 +177,7 @@ trap 'rm -f "$TMP_DESKTOP"' EXIT
 
 sed \
   -e "s|^Exec=.*|Exec=${BINDIR}/nearby_qml_file_tray_app|" \
-  -e "s|^Icon=.*|Icon=${ICON_DIR}/nearby-file-share.png|" \
+  -e "s|^Icon=.*|Icon=${ICON_DIR}/quick-share.png|" \
   "$DESKTOP_SRC" > "$TMP_DESKTOP"
 
 echo "[1/5] Installing application binary"
@@ -200,8 +200,8 @@ fi
 echo "[4/5] Installing desktop entry and icon"
 "${INSTALL_PREFIX[@]}" install -d "$DESKTOP_DIR"
 "${INSTALL_PREFIX[@]}" install -d "$ICON_DIR"
-"${INSTALL_PREFIX[@]}" install -m 0644 "$TMP_DESKTOP" "$DESKTOP_DIR/nearby-file-share.desktop"
-"${INSTALL_PREFIX[@]}" install -m 0644 "$ICON_SRC" "$ICON_DIR/nearby-file-share.png"
+"${INSTALL_PREFIX[@]}" install -m 0644 "$TMP_DESKTOP" "$DESKTOP_DIR/quick-share.desktop"
+"${INSTALL_PREFIX[@]}" install -m 0644 "$ICON_SRC" "$ICON_DIR/quick-share.png"
 
 echo "[5/5] Refreshing desktop/system caches"
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -211,12 +211,12 @@ if command -v ldconfig >/dev/null 2>&1 && [[ "$PREFIX" == "/usr" || "$PREFIX" ==
   "${INSTALL_PREFIX[@]}" ldconfig || true
 fi
 
-echo "Installed Nearby File Share:"
+echo "Installed Quick Share:"
 echo "  binary : $BINDIR/nearby_qml_file_tray_app"
 echo "  library: $LIBDIR/libnearby_sharing_api_shared.so"
 echo "  runtime: $LIBDIR/libsdbus-c++.so.2"
-echo "  desktop: $DESKTOP_DIR/nearby-file-share.desktop"
-echo "  icon   : $ICON_DIR/nearby-file-share.png"
+echo "  desktop: $DESKTOP_DIR/quick-share.desktop"
+echo "  icon   : $ICON_DIR/quick-share.png"
 if [[ -f "$HEADER_SRC" ]]; then
   echo "  header : $INCLUDEDIR/nearby_sharing_api.h"
 fi

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Share
+GenericName=Quick Share
+Comment=Share files with nearby devices using Quick Share
+Exec=quick-share
+Icon=quick-share
+Categories=Utility;Network;FileTransfer;
+Keywords=quick;quick share;share;file;nearby;nearby share;transfer;
+StartupNotify=false
+Terminal=false

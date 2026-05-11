@@ -184,8 +184,10 @@ int main(int argc, char* argv[]) {
   RedirectProcessLogsToConfiguredPath();
 
   QApplication app(argc, argv);
+  QCoreApplication::setApplicationName(QStringLiteral("Quick Share"));
+  QGuiApplication::setApplicationDisplayName(QStringLiteral("Quick Share"));
   app.setQuitOnLastWindowClosed(false);
-  QGuiApplication::setDesktopFileName(QStringLiteral("nearby-file-share"));
+  QGuiApplication::setDesktopFileName(QStringLiteral("quick-share"));
   app.setWindowIcon(QIcon(QStringLiteral(":/icons/nearby-linux-desktop.png")));
   if (NotifyExistingInstance()) {
     return 0;
@@ -266,7 +268,7 @@ int main(int argc, char* argv[]) {
   };
 
   QSystemTrayIcon tray(resolve_tray_icon());
-  tray.setToolTip(QStringLiteral("Nearby File Tray"));
+  tray.setToolTip(QStringLiteral("Quick Share"));
   NotificationManager notification_manager(&tray, &app);
 
   QMenu tray_menu;

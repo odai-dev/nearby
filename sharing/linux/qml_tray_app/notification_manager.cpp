@@ -25,7 +25,7 @@ constexpr char kNotificationsService[] = "org.freedesktop.Notifications";
 constexpr char kNotificationsPath[] = "/org/freedesktop/Notifications";
 constexpr char kNotificationsInterface[] = "org.freedesktop.Notifications";
 constexpr char kCopyActionId[] = "copy_value";
-constexpr char kDesktopEntryId[] = "nearby-file-share";
+constexpr char kDesktopEntryId[] = "quick-share";
 
 }  // namespace
 
@@ -220,7 +220,7 @@ QString NotificationManager::EnsureNotificationIconPath() {
   QString cache_dir =
       QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
   if (cache_dir.isEmpty()) {
-    cache_dir = QDir::tempPath() + QStringLiteral("/nearby-file-share");
+    cache_dir = QDir::tempPath() + QStringLiteral("/quick-share");
   }
 
   QDir dir(cache_dir);

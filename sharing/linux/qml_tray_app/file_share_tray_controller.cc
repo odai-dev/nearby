@@ -28,7 +28,7 @@
 
 namespace {
 
-constexpr char kAutostartFileName[] = "nearby-file-share.desktop";
+constexpr char kAutostartFileName[] = "quick-share.desktop";
 
 class NearbySharingApiService final : public NearbySharingServiceInterface {
  public:
@@ -158,12 +158,13 @@ QString AutostartDesktopEntry() {
   return QStringLiteral(
              "[Desktop Entry]\n"
              "Type=Application\n"
-             "Name=Nearby File Share\n"
-             "Comment=Share files with nearby devices using Nearby Connections\n"
+             "Name=Quick Share\n"
+             "GenericName=Quick Share\n"
+             "Comment=Share files with nearby devices using Quick Share\n"
              "Exec=%1 --start-hidden\n"
-             "Icon=nearby-file-share\n"
+             "Icon=quick-share\n"
              "Categories=Utility;Network;FileTransfer;\n"
-             "Keywords=share;file;nearby;transfer;\n"
+             "Keywords=quick;quick share;share;file;nearby;nearby share;transfer;\n"
              "StartupNotify=false\n"
              "Terminal=false\n"
              "X-GNOME-Autostart-enabled=true\n")

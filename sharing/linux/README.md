@@ -100,13 +100,13 @@ From `sharing/linux/qml_tray_app`:
 
 ```bash
 mkdir -p "$HOME/.local/share/applications"
-install -m 0644 nearby-file-share.desktop "$HOME/.local/share/applications/nearby-file-share.desktop"
-sed -i "s|^Exec=.*|Exec=$(pwd)/build/nearby_qml_file_tray_app|" "$HOME/.local/share/applications/nearby-file-share.desktop"
-sed -i "s|^Icon=.*|Icon=$(pwd)/nearby-linux-desktop.png|" "$HOME/.local/share/applications/nearby-file-share.desktop"
+install -m 0644 quick-share.desktop "$HOME/.local/share/applications/quick-share.desktop"
+sed -i "s|^Exec=.*|Exec=$(pwd)/build/nearby_qml_file_tray_app|" "$HOME/.local/share/applications/quick-share.desktop"
+sed -i "s|^Icon=.*|Icon=$(pwd)/nearby-linux-desktop.png|" "$HOME/.local/share/applications/quick-share.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 ```
 
-After this, search for `Nearby File Share` in your desktop launcher.
+After this, search for `Quick Share` in your desktop launcher.
 
 For the packaged release bundle, prefer the included `install_nearby_file_share.sh` instead of manually editing the desktop file. The installer validates runtime dependencies before copying files into place.
 

@@ -1,4 +1,4 @@
-# Nearby File Share Tray App
+# Quick Share Tray App
 
 This folder contains the Qt/QML **FileShareTray** application — a system tray
 app for file sharing via Nearby Sharing, wired to:
