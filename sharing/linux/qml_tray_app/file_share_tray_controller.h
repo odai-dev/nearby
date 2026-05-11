@@ -28,6 +28,12 @@ class NearbySharingServiceInterface {
   virtual void SendFiles(
       qlonglong share_target_id, const std::vector<std::string>& file_paths,
       std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void SendText(
+      qlonglong share_target_id, const std::string& text,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void SendUrl(
+      qlonglong share_target_id, const std::string& url,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
   virtual void Accept(
       qlonglong share_target_id,
       std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
@@ -42,6 +48,10 @@ class NearbySharingServiceInterface {
       std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
   virtual std::string GetQrCodeUrl() const = 0;
   virtual NearbySharingApi::DiagnosticInfo GetDiagnostics() const = 0;
+  virtual std::string GetReceiveFolder() const = 0;
+  virtual void SetReceiveFolder(
+      const std::string& folder_path,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
 };
 
 class FileShareTrayController : public QObject {
@@ -56,6 +66,8 @@ class FileShareTrayController : public QObject {
   Q_PROPERTY(QStringList pendingSendFilePaths READ pendingSendFilePaths NOTIFY pendingSendFilesChanged)
   Q_PROPERTY(int pendingSendFileCount READ pendingSendFileCount NOTIFY pendingSendFilesChanged)
   Q_PROPERTY(QString pendingSendSummary READ pendingSendSummary NOTIFY pendingSendFilesChanged)
+  Q_PROPERTY(QString pendingSendKind READ pendingSendKind NOTIFY pendingSendFilesChanged)
+  Q_PROPERTY(QString pendingSendText READ pendingSendText NOTIFY pendingSendFilesChanged)
   Q_PROPERTY(QVariantList discoveredTargets READ discoveredTargets NOTIFY discoveredTargetsChanged)
   Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
   Q_PROPERTY(bool autoAcceptIncoming READ autoAcceptIncoming WRITE setAutoAcceptIncoming NOTIFY autoAcceptIncomingChanged)
@@ -66,6 +78,7 @@ class FileShareTrayController : public QObject {
   Q_PROPERTY(QStringList qrCodeRows READ qrCodeRows NOTIFY qrCodeChanged)
   Q_PROPERTY(int qrCodeSize READ qrCodeSize NOTIFY qrCodeChanged)
   Q_PROPERTY(QString logPath READ logPath WRITE setLogPath NOTIFY logPathChanged)
+  Q_PROPERTY(QString receiveFolder READ receiveFolder WRITE setReceiveFolder NOTIFY receiveFolderChanged)
 
  public:
   using ServiceFactory =
@@ -88,6 +101,8 @@ class FileShareTrayController : public QObject {
   QStringList pendingSendFilePaths() const { return state_.pendingSendFilePaths(); }
   int pendingSendFileCount() const { return state_.pendingSendFileCount(); }
   QString pendingSendSummary() const { return state_.pendingSendSummary(); }
+  QString pendingSendKind() const { return state_.pendingSendKind(); }
+  QString pendingSendText() const { return state_.pendingSendText(); }
   QVariantList discoveredTargets() const { return state_.discoveredTargets(); }
   QVariantList transfers() const { return state_.transfers(); }
   bool autoAcceptIncoming() const { return state_.autoAcceptIncoming(); }
@@ -98,6 +113,7 @@ class FileShareTrayController : public QObject {
   QStringList qrCodeRows() const { return state_.qrCodeRows(); }
   int qrCodeSize() const { return state_.qrCodeSize(); }
   QString logPath() const { return state_.logPath(); }
+  QString receiveFolder() const { return receive_folder_; }
 
   // Public methods
   void setDeviceName(const QString& device_name);
@@ -105,6 +121,7 @@ class FileShareTrayController : public QObject {
   void setEnable5GhzHotspot(bool enabled);
   void setStartOnLogin(bool enabled);
   void setLogPath(const QString& path);
+  void setReceiveFolder(const QString& path);
 
   Q_INVOKABLE void start();
   Q_INVOKABLE void stop();
@@ -112,8 +129,13 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void switchToSendModeWithFile(const QString& file_path);
   Q_INVOKABLE void switchToSendModeWithFiles(const QStringList& file_paths);
   Q_INVOKABLE void switchToSendModeWithUrls(const QVariantList& urls);
+  Q_INVOKABLE void switchToSendModeWithText(const QString& text);
+  Q_INVOKABLE void switchToSendModeWithLink(const QString& url);
+  Q_INVOKABLE void prepareSendFromClipboard();
+  Q_INVOKABLE void prepareDroppedText(const QString& text);
   Q_INVOKABLE void sendPendingFileToTarget(qlonglong share_target_id);
   Q_INVOKABLE void sendPendingFilesToTarget(qlonglong share_target_id);
+  Q_INVOKABLE void retryTransfer(qlonglong share_target_id);
   Q_INVOKABLE void copyTextToClipboard(const QString& text);
   Q_INVOKABLE void openFileLocation(const QString& file_path);
   Q_INVOKABLE void clearTransfers();
@@ -122,6 +144,11 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void rejectTransfer(qlonglong share_target_id);
   Q_INVOKABLE void cancelTransfer(qlonglong share_target_id);
   Q_INVOKABLE void openFilePicker();
+  Q_INVOKABLE void chooseReceiveFolder();
+  Q_INVOKABLE void resetReceiveFolder();
+  Q_INVOKABLE void handleNotificationAction(const QString& action_key,
+                                            qlonglong share_target_id,
+                                            const QString& file_path);
 
  signals:
   void modeChanged();
@@ -140,11 +167,17 @@ class FileShareTrayController : public QObject {
   void qrCodeUrlChanged();
   void qrCodeChanged();
   void logPathChanged();
+  void receiveFolderChanged();
   void requestFilePicker();
+  void requestReceiveFolderPicker(const QString& current_folder);
 
   void requestTrayMessage(const QString& title, const QString& body);
   void requestCopyLinkTrayMessage(const QString& title, const QString& body,
                                    const QString& link);
+  void requestActionableTrayMessage(const QString& title, const QString& body,
+                                    qlonglong share_target_id,
+                                    const QString& file_path,
+                                    const QVariantList& actions);
 
  private:
   void initializeService();
@@ -156,6 +189,7 @@ class FileShareTrayController : public QObject {
   bool isCurrentOperation(uint64_t generation) const;
   bool isCurrentService(uint64_t generation) const;
   void refreshDiagnostics();
+  void refreshReceiveFolder();
   void emitDiagnosticsWarningIfNeeded(const QString& operation_name);
   QString diagnosticWarningsToSummary(
       const NearbySharingApi::DiagnosticInfo& diagnostics) const;
@@ -164,7 +198,17 @@ class FileShareTrayController : public QObject {
                               QStringList* file_names,
                               QString* error_message) const;
   QStringList localPathsFromUrlValues(const QVariantList& urls) const;
+  bool prepareSendText(const QString& text, const QString& kind,
+                       QString* error_message);
+  bool isHttpOrHttpsUrl(const QString& text) const;
   std::vector<std::string> pendingSendFilePathsForApi() const;
+  void sendPendingContentToTarget(qlonglong share_target_id);
+  void sendPreparedContentToTarget(qlonglong share_target_id,
+                                   const QString& target_name,
+                                   const QString& content_kind,
+                                   const QString& content_text,
+                                   const QStringList& file_paths,
+                                   const QStringList& file_names);
   void clearPendingSendState();
   void emitPendingSendStateChanged();
   QString transferFileSummary(const NearbySharingApi::TransferUpdateInfo& update) const;
@@ -188,6 +232,7 @@ class FileShareTrayController : public QObject {
   std::unique_ptr<NearbySharingServiceInterface> service_;
   FileShareState state_;
   QString diagnostics_summary_;
+  QString receive_folder_;
   uint64_t service_generation_ = 0;
   uint64_t operation_generation_ = 0;
   bool stopping_ = false;

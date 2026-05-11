@@ -29,6 +29,11 @@ ApplicationWindow {
 
     background: Rectangle { color: "#09090b" }
 
+    Shortcut {
+        sequence: StandardKey.Paste
+        onActivated: fileShareController.prepareSendFromClipboard()
+    }
+
     onClosing: function(close) {
         close.accepted = false
         root.hide()
@@ -129,6 +134,46 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.maximumWidth: 420
                             compact: root.compact || mainCol.width < 360
+                            visible: fileShareController.pendingSendKind === "files"
+                        }
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 520
+                            Layout.preferredHeight: textPreview.implicitHeight + 42
+                            visible: fileShareController.pendingSendKind === "text"
+                                     || fileShareController.pendingSendKind === "link"
+                            radius: 12
+                            color: "#1c1c1f"
+                            border.color: "#3f3f46"
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: fileShareController.pendingSendKind === "link"
+                                          ? "Link ready to send" : "Text ready to send"
+                                    color: "#fafafa"
+                                    font.pixelSize: root.compact ? 14 : 16
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                Label {
+                                    id: textPreview
+                                    Layout.fillWidth: true
+                                    text: fileShareController.pendingSendText
+                                    color: "#d4d4d8"
+                                    font.pixelSize: root.compact ? 12 : 13
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 5
+                                    elide: Text.ElideRight
+                                }
+                            }
                         }
 
                         Label {
@@ -165,13 +210,16 @@ ApplicationWindow {
                     id: dropArea
                     anchors.fill: parent
                     onEntered: (drag) => {
-                        if (drag.hasUrls) {
+                        if (drag.hasUrls || drag.hasText) {
                             drag.accept(Qt.LinkAction)
                         }
                     }
                     onDropped: (drop) => {
                         if (drop.hasUrls) {
                             fileShareController.switchToSendModeWithUrls(drop.urls)
+                            drop.accept()
+                        } else if (drop.hasText) {
+                            fileShareController.prepareDroppedText(drop.text)
                             drop.accept()
                         }
                     }

@@ -276,6 +276,20 @@ int main(int argc, char* argv[]) {
                        controller.switchToSendModeWithFiles(files);
                      }
                    });
+  QObject::connect(&controller,
+                   &FileShareTrayController::requestReceiveFolderPicker,
+                   [&controller](const QString& current_folder) {
+                     const QString initial_folder =
+                         current_folder.trimmed().isEmpty()
+                             ? QDir::homePath()
+                             : current_folder;
+                     const QString folder = QFileDialog::getExistingDirectory(
+                         nullptr, QStringLiteral("Select receive folder"),
+                         initial_folder);
+                     if (!folder.isEmpty()) {
+                       controller.setReceiveFolder(folder);
+                     }
+                   });
 
   QObject::connect(&controller, &FileShareTrayController::requestTrayMessage,
                    &notification_manager, &NotificationManager::ShowNotification);
@@ -288,6 +302,14 @@ int main(int argc, char* argv[]) {
                      notification_manager.ShowCopyableNotification(
                          title, body, link, QStringLiteral("Copy link"));
                    });
+  QObject::connect(&controller,
+                   &FileShareTrayController::requestActionableTrayMessage,
+                   &notification_manager,
+                   &NotificationManager::ShowActionableNotification);
+  QObject::connect(&notification_manager,
+                   &NotificationManager::notificationActionRequested,
+                   &controller,
+                   &FileShareTrayController::handleNotificationAction);
 
   QObject::connect(&app, &QCoreApplication::aboutToQuit, &controller,
                    [&controller]() { controller.stop(); });

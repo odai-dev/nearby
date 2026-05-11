@@ -295,6 +295,28 @@ Item {
             }
             onClicked: fileShareController.cancelTransfer(modelData.id)
         }
+
+        Button {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: transferData && transferData.canRetry
+            text: "Retry"
+            flat: true
+            contentItem: Text {
+                text: parent.text
+                color: "#ffffff"
+                font.pixelSize: compact ? 10 : 11
+                font.weight: Font.Medium
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                implicitWidth: compact ? 58 : 64
+                implicitHeight: compact ? 26 : 28
+                color: parent.pressed ? "#059669" : "#10b981"
+                radius: 14
+            }
+            onClicked: fileShareController.retryTransfer(modelData.id)
+        }
     }
 
     Timer {

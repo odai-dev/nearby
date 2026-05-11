@@ -103,7 +103,11 @@ Item {
                     Layout.leftMargin: root.contentInset
                     Layout.topMargin: compact ? 10 : 16
                     Layout.bottomMargin: 8
-                    text: fileShareController.pendingSendFileCount === 1
+                    text: fileShareController.pendingSendKind === "text"
+                          ? "Sharing text"
+                          : fileShareController.pendingSendKind === "link"
+                          ? "Sharing link"
+                          : fileShareController.pendingSendFileCount === 1
                           ? "Sharing 1 file"
                           : "Sharing " + fileShareController.pendingSendFileCount + " files"
                     font.pixelSize: compact ? 13 : 14
@@ -121,8 +125,11 @@ Item {
 
                     Label {
                         anchors.centerIn: parent
-                        text: "📄"
+                        text: fileShareController.pendingSendKind === "link"
+                              ? "🔗"
+                              : fileShareController.pendingSendKind === "text" ? "Aa" : "📄"
                         font.pixelSize: compact ? 24 : 28
+                        color: textPrimary
                     }
                 }
 

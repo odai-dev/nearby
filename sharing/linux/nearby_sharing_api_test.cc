@@ -58,5 +58,44 @@ TEST(NearbySharingApiTest, ValidateSendFilePathsAcceptsReadableNonEmptyFile) {
             NearbySharingApi::StatusCode::kOk);
 }
 
+TEST(NearbySharingApiTest, ValidateSendTextRejectsEmptyText) {
+  EXPECT_EQ(NearbySharingApi::ValidateSendText(" \t\n"),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+}
+
+TEST(NearbySharingApiTest, ValidateSendTextAcceptsValidText) {
+  EXPECT_EQ(NearbySharingApi::ValidateSendText("hello"),
+            NearbySharingApi::StatusCode::kOk);
+}
+
+TEST(NearbySharingApiTest, ValidateSendUrlRejectsInvalidUrl) {
+  EXPECT_EQ(NearbySharingApi::ValidateSendUrl("ftp://example.com"),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+  EXPECT_EQ(NearbySharingApi::ValidateSendUrl("example.com"),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+  EXPECT_EQ(NearbySharingApi::ValidateSendUrl("https://"),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+}
+
+TEST(NearbySharingApiTest, ValidateSendUrlAcceptsHttpUrls) {
+  EXPECT_EQ(NearbySharingApi::ValidateSendUrl("https://example.com"),
+            NearbySharingApi::StatusCode::kOk);
+  EXPECT_EQ(NearbySharingApi::ValidateSendUrl("http://example.com"),
+            NearbySharingApi::StatusCode::kOk);
+}
+
+TEST(NearbySharingApiTest, ValidateReceiveFolderChecksFolderState) {
+  const std::string missing_path = testing::TempDir() + "/nearby-missing-dir";
+  const std::string file_path = testing::TempDir() + "/nearby-not-dir";
+  std::ofstream(file_path) << "hello";
+
+  EXPECT_EQ(NearbySharingApi::ValidateReceiveFolder(missing_path),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+  EXPECT_EQ(NearbySharingApi::ValidateReceiveFolder(file_path),
+            NearbySharingApi::StatusCode::kInvalidArgument);
+  EXPECT_EQ(NearbySharingApi::ValidateReceiveFolder(testing::TempDir()),
+            NearbySharingApi::StatusCode::kOk);
+}
+
 }  // namespace
 }  // namespace nearby::sharing

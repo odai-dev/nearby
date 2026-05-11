@@ -122,11 +122,18 @@ class __attribute__((visibility("default"))) NearbySharingApi {
   void SendFiles(int64_t share_target_id,
                  const std::vector<std::string>& file_paths,
                  std::function<void(StatusCode)> callback);
+  void SendText(int64_t share_target_id, const std::string& text,
+                std::function<void(StatusCode)> callback);
+  void SendUrl(int64_t share_target_id, const std::string& url,
+               std::function<void(StatusCode)> callback);
   void Accept(int64_t share_target_id, std::function<void(StatusCode)> callback);
   void Reject(int64_t share_target_id, std::function<void(StatusCode)> callback);
   void Cancel(int64_t share_target_id, std::function<void(StatusCode)> callback);
   void Set5GhzHotspotEnabled(bool enabled);
   void SetDeviceName(const std::string& device_name);
+  std::string GetReceiveFolder() const;
+  void SetReceiveFolder(const std::string& folder_path,
+                        std::function<void(StatusCode)> callback);
 
   void Shutdown(std::function<void(StatusCode)> callback);
   std::string GetQrCodeUrl() const;
@@ -134,6 +141,10 @@ class __attribute__((visibility("default"))) NearbySharingApi {
   static DiagnosticInfo CollectDiagnostics();
   static StatusCode ValidateSendFilePaths(
       const std::vector<std::string>& file_paths);
+  static StatusCode ValidateSendText(const std::string& text);
+  static StatusCode ValidateSendUrl(const std::string& url);
+  static StatusCode ValidateReceiveFolder(const std::string& folder_path);
+  static std::string DefaultReceiveFolder();
 
   static std::string StatusCodeToString(StatusCode status);
   static std::string TransferStatusToString(TransferStatus status);

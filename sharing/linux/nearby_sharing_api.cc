@@ -1,9 +1,12 @@
 #include "sharing/linux/nearby_sharing_api.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <cstdlib>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -12,6 +15,7 @@
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/evp.h>
+#include <unistd.h>
 
 #include "absl/strings/escaping.h"
 #include "absl/time/time.h"
@@ -27,9 +31,11 @@
 #include "sharing/flags/generated/nearby_sharing_feature_flags.h"
 #include "sharing/linux/platform/linux_sharing_platform.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
+#include "sharing/nearby_sharing_settings.h"
 #include "sharing/nearby_sharing_service_factory.h"
 #include "sharing/proto/enums.pb.h"
 #include "sharing/share_target_discovered_callback.h"
+#include "sharing/text_attachment.h"
 #include "sharing/transfer_metadata.h"
 #include "sharing/transfer_update_callback.h"
 
@@ -254,6 +260,44 @@ bool DirectoryHasEntries(const char* path) {
     return false;
   }
   return it != std::filesystem::directory_iterator();
+}
+
+std::string TrimAscii(std::string value) {
+  const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+  value.erase(value.begin(), std::find_if(value.begin(), value.end(),
+                                          [&](unsigned char c) {
+                                            return !is_space(c);
+                                          }));
+  value.erase(std::find_if(value.rbegin(), value.rend(),
+                           [&](unsigned char c) { return !is_space(c); })
+                  .base(),
+              value.end());
+  return value;
+}
+
+bool IsHttpOrHttpsUrl(const std::string& value) {
+  size_t host_start = std::string::npos;
+  if (value.rfind("http://", 0) == 0) {
+    host_start = 7;
+  } else if (value.rfind("https://", 0) == 0) {
+    host_start = 8;
+  } else {
+    return false;
+  }
+  if (host_start >= value.size()) {
+    return false;
+  }
+  const size_t host_end = value.find_first_of("/?#", host_start);
+  return host_end == std::string::npos ? host_start < value.size()
+                                       : host_end > host_start;
+}
+
+std::unique_ptr<nearby::sharing::AttachmentContainer> BuildTextAttachments(
+    nearby::sharing::TextAttachment::Type type, const std::string& text) {
+  nearby::sharing::AttachmentContainer::Builder builder;
+  builder.AddTextAttachment(nearby::sharing::TextAttachment(
+      type, text, std::nullopt, std::nullopt));
+  return builder.Build();
 }
 
 }  // namespace
@@ -622,6 +666,82 @@ void NearbySharingApi::SendFiles(int64_t share_target_id,
       });
 }
 
+void NearbySharingApi::SendText(int64_t share_target_id, const std::string& text,
+                                std::function<void(StatusCode)> callback) {
+  const std::string trimmed_text = TrimAscii(text);
+  const StatusCode validation_status = ValidateSendText(trimmed_text);
+  if (validation_status != StatusCode::kOk) {
+    if (callback) {
+      callback(validation_status);
+    }
+    return;
+  }
+
+  if (impl_->service == nullptr) {
+    if (callback) {
+      callback(StatusCode::kError);
+    }
+    return;
+  }
+
+  std::unique_ptr<nearby::sharing::AttachmentContainer> attachments =
+      BuildTextAttachments(nearby::sharing::service::proto::TextMetadata::TEXT,
+                           trimmed_text);
+  if (!attachments || !attachments->HasAttachments()) {
+    if (callback) {
+      callback(StatusCode::kInvalidArgument);
+    }
+    return;
+  }
+
+  impl_->service->SendAttachments(
+      share_target_id, std::move(attachments),
+      [cb = std::move(callback)](
+          nearby::sharing::NearbySharingService::StatusCodes status) mutable {
+        if (cb) {
+          cb(ToFacadeStatus(status));
+        }
+      });
+}
+
+void NearbySharingApi::SendUrl(int64_t share_target_id, const std::string& url,
+                               std::function<void(StatusCode)> callback) {
+  const std::string trimmed_url = TrimAscii(url);
+  const StatusCode validation_status = ValidateSendUrl(trimmed_url);
+  if (validation_status != StatusCode::kOk) {
+    if (callback) {
+      callback(validation_status);
+    }
+    return;
+  }
+
+  if (impl_->service == nullptr) {
+    if (callback) {
+      callback(StatusCode::kError);
+    }
+    return;
+  }
+
+  std::unique_ptr<nearby::sharing::AttachmentContainer> attachments =
+      BuildTextAttachments(nearby::sharing::service::proto::TextMetadata::URL,
+                           trimmed_url);
+  if (!attachments || !attachments->HasAttachments()) {
+    if (callback) {
+      callback(StatusCode::kInvalidArgument);
+    }
+    return;
+  }
+
+  impl_->service->SendAttachments(
+      share_target_id, std::move(attachments),
+      [cb = std::move(callback)](
+          nearby::sharing::NearbySharingService::StatusCodes status) mutable {
+        if (cb) {
+          cb(ToFacadeStatus(status));
+        }
+      });
+}
+
 void NearbySharingApi::Accept(int64_t share_target_id,
                               std::function<void(StatusCode)> callback) {
   if (impl_->service == nullptr) {
@@ -688,6 +808,39 @@ void NearbySharingApi::SetDeviceName(const std::string& device_name) {
     return;
   }
   impl_->service->GetLocalDeviceDataManager()->SetDeviceName(device_name);
+}
+
+std::string NearbySharingApi::GetReceiveFolder() const {
+  if (impl_->service == nullptr || impl_->service->GetSettings() == nullptr) {
+    return DefaultReceiveFolder();
+  }
+  std::string receive_folder = impl_->service->GetSettings()->GetCustomSavePath();
+  return receive_folder.empty() ? DefaultReceiveFolder() : receive_folder;
+}
+
+void NearbySharingApi::SetReceiveFolder(
+    const std::string& folder_path,
+    std::function<void(StatusCode)> callback) {
+  const std::string trimmed_folder = TrimAscii(folder_path);
+  const StatusCode validation_status = ValidateReceiveFolder(trimmed_folder);
+  if (validation_status != StatusCode::kOk) {
+    if (callback) {
+      callback(validation_status);
+    }
+    return;
+  }
+  if (impl_->service == nullptr || impl_->service->GetSettings() == nullptr) {
+    if (callback) {
+      callback(StatusCode::kError);
+    }
+    return;
+  }
+  impl_->service->GetSettings()->SetCustomSavePathAsync(
+      trimmed_folder, [cb = std::move(callback)]() mutable {
+        if (cb) {
+          cb(StatusCode::kOk);
+        }
+      });
 }
 
 void NearbySharingApi::Shutdown(std::function<void(StatusCode)> callback) {
@@ -772,6 +925,49 @@ NearbySharingApi::StatusCode NearbySharingApi::ValidateSendFilePaths(
   }
 
   return StatusCode::kOk;
+}
+
+NearbySharingApi::StatusCode NearbySharingApi::ValidateSendText(
+    const std::string& text) {
+  return TrimAscii(text).empty() ? StatusCode::kInvalidArgument
+                                 : StatusCode::kOk;
+}
+
+NearbySharingApi::StatusCode NearbySharingApi::ValidateSendUrl(
+    const std::string& url) {
+  const std::string trimmed_url = TrimAscii(url);
+  if (trimmed_url.empty() || !IsHttpOrHttpsUrl(trimmed_url)) {
+    return StatusCode::kInvalidArgument;
+  }
+  return StatusCode::kOk;
+}
+
+NearbySharingApi::StatusCode NearbySharingApi::ValidateReceiveFolder(
+    const std::string& folder_path) {
+  const std::string trimmed_folder = TrimAscii(folder_path);
+  if (trimmed_folder.empty()) {
+    return StatusCode::kInvalidArgument;
+  }
+
+  std::error_code error;
+  if (!std::filesystem::exists(trimmed_folder, error) || error ||
+      !std::filesystem::is_directory(trimmed_folder, error) || error ||
+      access(trimmed_folder.c_str(), W_OK) != 0) {
+    return StatusCode::kInvalidArgument;
+  }
+  return StatusCode::kOk;
+}
+
+std::string NearbySharingApi::DefaultReceiveFolder() {
+  const char* xdg_download_dir = std::getenv("XDG_DOWNLOAD_DIR");
+  if (xdg_download_dir != nullptr && *xdg_download_dir != '\0') {
+    return xdg_download_dir;
+  }
+  const char* home = std::getenv("HOME");
+  if (home != nullptr && *home != '\0') {
+    return std::string(home) + "/Downloads";
+  }
+  return "/tmp";
 }
 
 std::string NearbySharingApi::StatusCodeToString(StatusCode status) {

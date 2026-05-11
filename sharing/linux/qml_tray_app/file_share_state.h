@@ -27,8 +27,10 @@ class FileShareState {
   QString pendingSendFilePath() const { return pending_send_file_path_; }
   QStringList pendingSendFileNames() const { return pending_send_file_names_; }
   QStringList pendingSendFilePaths() const { return pending_send_file_paths_; }
-  int pendingSendFileCount() const { return pending_send_file_paths_.size(); }
+  int pendingSendFileCount() const;
   QString pendingSendSummary() const;
+  QString pendingSendKind() const { return pending_send_kind_; }
+  QString pendingSendText() const { return pending_send_text_; }
   qlonglong pendingSendTargetId() const { return pending_send_target_id_; }
 
   QVariantList discoveredTargets() const { return discovered_targets_; }
@@ -56,10 +58,13 @@ class FileShareState {
   void SetPendingSendFiles(const QStringList& file_paths,
                            const QStringList& file_names,
                            qlonglong target_id);
+  void SetPendingSendText(const QString& kind, const QString& text,
+                          const QString& summary, qlonglong target_id);
 
   void ClearPendingSendFile() {
-    SetPendingSendFiles({}, {}, 0);
+    ClearPendingSend();
   }
+  void ClearPendingSend();
 
   void SetQrCodeData(const QString& url, const QStringList& rows, int size) {
     qr_code_url_ = url;
@@ -82,8 +87,12 @@ class FileShareState {
                            qulonglong transfer_speed, const QString& connection_medium,
                            const QString& direction, const QString& file_name,
                            const QString& file_path, int total_attachments = 0,
-                           int transferred_attachments = 0);
+                           int transferred_attachments = 0,
+                           const QString& content_kind = QString(),
+                           const QString& content_text = QString(),
+                           const QStringList& file_paths = {});
   void RemoveTransfer(qlonglong target_id);
+  QVariantMap TransferForTarget(qlonglong target_id) const;
   bool HasActiveTransferForTarget(qlonglong target_id) const;
   bool HasActiveTransfers() const;
 
@@ -110,6 +119,9 @@ class FileShareState {
   QString log_path_ = QStringLiteral("/tmp/nearby_qml_file_tray.log");
 
   // Pending send state
+  QString pending_send_kind_;
+  QString pending_send_text_;
+  QString pending_send_summary_;
   QString pending_send_file_path_;
   QString pending_send_file_name_;
   QStringList pending_send_file_paths_;

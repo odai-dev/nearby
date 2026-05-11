@@ -114,6 +114,41 @@ Drawer {
                                 onEditingFinished: fileShareController.deviceName = text
                             }
                         }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                Layout.fillWidth: true
+                                color: root.textPrimary
+                                font.pixelSize: 13
+                                text: "Receive folder"
+                            }
+
+                            ThemedField {
+                                font.pixelSize: 11
+                                text: fileShareController.receiveFolder
+                                onEditingFinished: fileShareController.receiveFolder = text
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Button {
+                                    text: "Choose"
+                                    onClicked: fileShareController.chooseReceiveFolder()
+                                }
+
+                                Button {
+                                    text: "Reset"
+                                    onClicked: fileShareController.resetReceiveFolder()
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
                     }
                 }
 

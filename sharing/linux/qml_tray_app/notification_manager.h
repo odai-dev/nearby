@@ -4,6 +4,7 @@
 #include <QObject>
 
 #include <QHash>
+#include <QVariantList>
 #include <QString>
 
 class QSystemTrayIcon;
@@ -19,6 +20,15 @@ class NotificationManager : public QObject {
   void ShowCopyableNotification(const QString& title, const QString& body,
                                 const QString& text_to_copy,
                                 const QString& action_label);
+  void ShowActionableNotification(const QString& title, const QString& body,
+                                  qlonglong share_target_id,
+                                  const QString& file_path,
+                                  const QVariantList& actions);
+
+ signals:
+  void notificationActionRequested(const QString& action_key,
+                                   qlonglong share_target_id,
+                                   const QString& file_path);
 
  private slots:
   void OnActionInvoked(uint notification_id, const QString& action_key);
@@ -27,6 +37,11 @@ class NotificationManager : public QObject {
  private:
   struct CopyActionState {
     QString text_to_copy;
+  };
+  struct ActionState {
+    qlonglong share_target_id = 0;
+    QString file_path;
+    QHash<QString, QString> action_labels;
   };
 
   void CopyTextToClipboard(const QString& text_to_copy,
@@ -40,6 +55,7 @@ class NotificationManager : public QObject {
 
   bool supports_actions_ = false;
   QHash<uint, CopyActionState> copy_actions_;
+  QHash<uint, ActionState> notification_actions_;
   QString notification_icon_path_;
   QSystemTrayIcon* tray_icon_ = nullptr;
 };

@@ -8,9 +8,13 @@
 #include <vector>
 
 #include <QFile>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QMimeData>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUrl>
 #include <QtTest/QtTest>
 
 namespace {
@@ -30,10 +34,14 @@ struct FakeServiceState {
   StatusCode start_receive_status = StatusCode::kOk;
   StatusCode stop_receive_status = StatusCode::kStatusAlreadyStopped;
   StatusCode send_files_status = StatusCode::kOk;
+  StatusCode send_text_status = StatusCode::kOk;
+  StatusCode send_url_status = StatusCode::kOk;
   StatusCode accept_status = StatusCode::kOk;
   StatusCode reject_status = StatusCode::kOk;
   StatusCode cancel_status = StatusCode::kOk;
+  StatusCode set_receive_folder_status = StatusCode::kOk;
   StatusCode shutdown_status = StatusCode::kOk;
+  std::string receive_folder;
 
   bool defer_start_send = false;
   bool defer_stop_send = false;
@@ -50,14 +58,20 @@ struct FakeServiceState {
   int start_receive_calls = 0;
   int stop_receive_calls = 0;
   int send_files_calls = 0;
+  int send_text_calls = 0;
+  int send_url_calls = 0;
   int accept_calls = 0;
   int reject_calls = 0;
   int cancel_calls = 0;
+  int set_receive_folder_calls = 0;
   int shutdown_calls = 0;
   int set_hotspot_calls = 0;
   qlonglong last_send_target_id = 0;
   qlonglong last_cancel_target_id = 0;
   std::vector<std::string> last_sent_files;
+  std::string last_sent_text;
+  std::string last_sent_url;
+  std::string last_receive_folder;
 };
 
 class FakeSharingService final : public NearbySharingServiceInterface {
@@ -105,6 +119,26 @@ class FakeSharingService final : public NearbySharingServiceInterface {
     }
   }
 
+  void SendText(qlonglong share_target_id, const std::string& text,
+                std::function<void(StatusCode)> callback) override {
+    ++state_->send_text_calls;
+    state_->last_send_target_id = share_target_id;
+    state_->last_sent_text = text;
+    if (callback) {
+      callback(state_->send_text_status);
+    }
+  }
+
+  void SendUrl(qlonglong share_target_id, const std::string& url,
+               std::function<void(StatusCode)> callback) override {
+    ++state_->send_url_calls;
+    state_->last_send_target_id = share_target_id;
+    state_->last_sent_url = url;
+    if (callback) {
+      callback(state_->send_url_status);
+    }
+  }
+
   void Accept(qlonglong, std::function<void(StatusCode)> callback) override {
     ++state_->accept_calls;
     if (callback) {
@@ -141,6 +175,21 @@ class FakeSharingService final : public NearbySharingServiceInterface {
 
   NearbySharingApi::DiagnosticInfo GetDiagnostics() const override {
     return state_->diagnostics;
+  }
+
+  std::string GetReceiveFolder() const override {
+    return state_->receive_folder;
+  }
+
+  void SetReceiveFolder(
+      const std::string& folder_path,
+      std::function<void(StatusCode)> callback) override {
+    ++state_->set_receive_folder_calls;
+    state_->last_receive_folder = folder_path;
+    state_->receive_folder = folder_path;
+    if (callback) {
+      callback(state_->set_receive_folder_status);
+    }
   }
 
  private:
@@ -442,6 +491,155 @@ class FileShareTrayControllerTest : public QObject {
                  QStringLiteral("Transfer cancelled"));
     QCOMPARE(FirstTransfer(*controller).value(QStringLiteral("status")).toString(),
              QStringLiteral("Cancelled"));
+  }
+
+  void clipboardTextPreparesTextSend() {
+    auto controller = CreateController();
+    QClipboard* clipboard = QGuiApplication::clipboard();
+    QVERIFY(clipboard != nullptr);
+    clipboard->setText(QStringLiteral("hello from clipboard"));
+
+    controller->prepareSendFromClipboard();
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("text"));
+    QCOMPARE(controller->pendingSendText(), QStringLiteral("hello from clipboard"));
+    QCOMPARE(controller->pendingSendFileCount(), 1);
+  }
+
+  void clipboardUrlPreparesLinkSend() {
+    auto controller = CreateController();
+    QClipboard* clipboard = QGuiApplication::clipboard();
+    QVERIFY(clipboard != nullptr);
+    clipboard->setText(QStringLiteral("https://example.com/path"));
+
+    controller->prepareSendFromClipboard();
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("link"));
+    QCOMPARE(controller->pendingSendText(), QStringLiteral("https://example.com/path"));
+  }
+
+  void clipboardFileUrlsPrepareFileSend() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString file_path = dir.filePath(QStringLiteral("hello.txt"));
+    QVERIFY(WriteTextFile(file_path, "hello"));
+
+    auto controller = CreateController();
+    auto* mime_data = new QMimeData();
+    mime_data->setUrls({QUrl::fromLocalFile(file_path)});
+    QClipboard* clipboard = QGuiApplication::clipboard();
+    QVERIFY(clipboard != nullptr);
+    clipboard->setMimeData(mime_data);
+
+    controller->prepareSendFromClipboard();
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("files"));
+    QCOMPARE(controller->pendingSendFilePaths(), QStringList{file_path});
+  }
+
+  void sendsPreparedTextAndLinkToTarget() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    controller->switchToSendModeWithText(QStringLiteral("hello"));
+    controller->sendPendingFilesToTarget(42);
+    QTRY_COMPARE(service->send_text_calls, 1);
+    QCOMPARE(service->last_send_target_id, 42);
+    QCOMPARE(QString::fromStdString(service->last_sent_text),
+             QStringLiteral("hello"));
+
+    controller->switchToSendModeWithLink(QStringLiteral("https://example.com"));
+    controller->sendPendingFilesToTarget(43);
+    QTRY_COMPARE(service->send_url_calls, 1);
+    QCOMPARE(service->last_send_target_id, 43);
+    QCOMPARE(QString::fromStdString(service->last_sent_url),
+             QStringLiteral("https://example.com"));
+  }
+
+  void retryFailedOutgoingTextResendsOriginalPayload() {
+    auto controller = CreateController();
+    auto service = services_.back();
+    service->send_text_status = StatusCode::kError;
+
+    controller->switchToSendModeWithText(QStringLiteral("try again"));
+    controller->sendPendingFilesToTarget(42);
+    QTRY_COMPARE(controller->transfers().size(), 1);
+    QTRY_COMPARE(FirstTransfer(*controller).value(QStringLiteral("status")).toString(),
+                 QStringLiteral("Failed"));
+    QCOMPARE(FirstTransfer(*controller).value(QStringLiteral("canRetry")).toBool(),
+             true);
+    QCOMPARE(controller->pendingSendFileCount(), 0);
+
+    service->send_text_status = StatusCode::kOk;
+    controller->retryTransfer(42);
+
+    QTRY_COMPARE(service->send_text_calls, 2);
+    QCOMPARE(QString::fromStdString(service->last_sent_text),
+             QStringLiteral("try again"));
+    QCOMPARE(FirstTransfer(*controller).value(QStringLiteral("status")).toString(),
+             QStringLiteral("Queued"));
+  }
+
+  void retryUnavailableForIncomingFailure() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    NearbySharingApi::TransferUpdateInfo update;
+    update.share_target_id = 77;
+    update.device_name = "Phone";
+    update.is_incoming = true;
+    update.status = NearbySharingApi::TransferStatus::kFailed;
+    update.first_file_name = "hello.txt";
+    update.total_attachments = 1;
+    service->listener.transfer_update_cb(update);
+    QTRY_COMPARE(controller->transfers().size(), 1);
+
+    controller->retryTransfer(77);
+
+    QCOMPARE(service->send_files_calls, 0);
+    QCOMPARE(service->send_text_calls, 0);
+    QCOMPARE(service->send_url_calls, 0);
+    QCOMPARE(controller->statusMessage(), QStringLiteral("Retry is not available"));
+  }
+
+  void receiveFolderSettingPersistsAndReportsInvalidFolders() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    controller->setReceiveFolder(dir.path());
+
+    QTRY_COMPARE(service->set_receive_folder_calls, 1);
+    QTRY_COMPARE(controller->receiveFolder(), dir.path());
+    QCOMPARE(QString::fromStdString(service->last_receive_folder), dir.path());
+
+    const QString missing_folder = dir.filePath(QStringLiteral("missing"));
+    controller->setReceiveFolder(missing_folder);
+
+    QCOMPARE(service->set_receive_folder_calls, 1);
+    QCOMPARE(controller->statusMessage(),
+             QStringLiteral("Receive folder is not valid"));
+  }
+
+  void incomingConfirmationEmitsActionableNotificationAndHandlerAccepts() {
+    auto controller = CreateController();
+    auto service = services_.back();
+    QSignalSpy actionable_messages(
+        controller.get(), &FileShareTrayController::requestActionableTrayMessage);
+
+    NearbySharingApi::TransferUpdateInfo update;
+    update.share_target_id = 88;
+    update.device_name = "Phone";
+    update.is_incoming = true;
+    update.status = NearbySharingApi::TransferStatus::kAwaitingLocalConfirmation;
+    update.first_file_name = "hello.txt";
+    update.total_attachments = 1;
+    service->listener.transfer_update_cb(update);
+
+    QTRY_COMPARE(actionable_messages.count(), 1);
+    controller->handleNotificationAction(QStringLiteral("accept"), 88, {});
+    QTRY_COMPARE(service->accept_calls, 1);
   }
 
   void targetRemovalPreservesCompletedTransferContext() {

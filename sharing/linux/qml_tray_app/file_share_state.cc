@@ -3,7 +3,17 @@
 
 FileShareState::FileShareState() = default;
 
+int FileShareState::pendingSendFileCount() const {
+  if (pending_send_kind_ == QStringLiteral("files")) {
+    return pending_send_file_paths_.size();
+  }
+  return pending_send_kind_.isEmpty() ? 0 : 1;
+}
+
 QString FileShareState::pendingSendSummary() const {
+  if (!pending_send_summary_.isEmpty()) {
+    return pending_send_summary_;
+  }
   if (pending_send_file_names_.isEmpty()) {
     return {};
   }
@@ -16,6 +26,9 @@ QString FileShareState::pendingSendSummary() const {
 void FileShareState::SetPendingSendFiles(const QStringList& file_paths,
                                          const QStringList& file_names,
                                          qlonglong target_id) {
+  pending_send_kind_ = file_paths.isEmpty() ? QString() : QStringLiteral("files");
+  pending_send_text_.clear();
+  pending_send_summary_.clear();
   pending_send_file_paths_ = file_paths;
   pending_send_file_names_ = file_names;
   pending_send_file_path_ =
@@ -23,6 +36,30 @@ void FileShareState::SetPendingSendFiles(const QStringList& file_paths,
   pending_send_file_name_ =
       pending_send_file_names_.isEmpty() ? QString() : pending_send_file_names_.first();
   pending_send_target_id_ = target_id;
+}
+
+void FileShareState::SetPendingSendText(const QString& kind, const QString& text,
+                                        const QString& summary,
+                                        qlonglong target_id) {
+  pending_send_kind_ = kind;
+  pending_send_text_ = text;
+  pending_send_summary_ = summary;
+  pending_send_file_paths_.clear();
+  pending_send_file_names_.clear();
+  pending_send_file_path_.clear();
+  pending_send_file_name_.clear();
+  pending_send_target_id_ = target_id;
+}
+
+void FileShareState::ClearPendingSend() {
+  pending_send_kind_.clear();
+  pending_send_text_.clear();
+  pending_send_summary_.clear();
+  pending_send_file_paths_.clear();
+  pending_send_file_names_.clear();
+  pending_send_file_path_.clear();
+  pending_send_file_name_.clear();
+  pending_send_target_id_ = 0;
 }
 
 void FileShareState::AddOrUpdateTarget(qlonglong id, const QString& name,
@@ -93,7 +130,34 @@ void FileShareState::AddOrUpdateTransfer(
     qulonglong transfer_speed, const QString& connection_medium,
     const QString& direction, const QString& file_name,
     const QString& file_path, int total_attachments,
-    int transferred_attachments) {
+    int transferred_attachments, const QString& content_kind,
+    const QString& content_text, const QStringList& file_paths) {
+  QString retry_kind = content_kind;
+  QString retry_text = content_text;
+  QStringList retry_file_paths = file_paths;
+  if (transfer_row_by_target_.contains(target_id)) {
+    const int row_index = transfer_row_by_target_.value(target_id);
+    if (row_index >= 0 && row_index < transfers_.size()) {
+      const QVariantMap existing = transfers_[row_index].toMap();
+      if (retry_kind.isEmpty()) {
+        retry_kind = existing.value(QStringLiteral("contentKind")).toString();
+      }
+      if (retry_text.isEmpty()) {
+        retry_text = existing.value(QStringLiteral("contentText")).toString();
+      }
+      if (retry_file_paths.isEmpty()) {
+        retry_file_paths =
+            existing.value(QStringLiteral("filePaths")).toStringList();
+      }
+    }
+  }
+
+  const bool can_retry =
+      direction == QStringLiteral("outgoing") && !retry_kind.isEmpty() &&
+      (status == QStringLiteral("Failed") ||
+       status == QStringLiteral("Cancelled") ||
+       status == QStringLiteral("TimedOut"));
+
   QVariantMap transfer{
       {QStringLiteral("targetId"), target_id},
       {QStringLiteral("targetName"), target_name},
@@ -108,6 +172,13 @@ void FileShareState::AddOrUpdateTransfer(
       {QStringLiteral("filePath"), file_path},
       {QStringLiteral("totalAttachments"), total_attachments},
       {QStringLiteral("transferredAttachments"), transferred_attachments},
+      {QStringLiteral("contentKind"), retry_kind},
+      {QStringLiteral("contentText"), retry_text},
+      {QStringLiteral("filePaths"), retry_file_paths},
+      {QStringLiteral("canRetry"), can_retry},
+      {QStringLiteral("canOpen"), direction == QStringLiteral("incoming") &&
+                                     status == QStringLiteral("Complete") &&
+                                     !file_path.isEmpty()},
   };
 
   if (transfer_row_by_target_.contains(target_id)) {
@@ -120,6 +191,18 @@ void FileShareState::AddOrUpdateTransfer(
 
   transfer_row_by_target_.insert(target_id, transfers_.size());
   transfers_.append(transfer);
+}
+
+QVariantMap FileShareState::TransferForTarget(qlonglong target_id) const {
+  if (!transfer_row_by_target_.contains(target_id)) {
+    return {};
+  }
+
+  const int row_index = transfer_row_by_target_.value(target_id);
+  if (row_index < 0 || row_index >= transfers_.size()) {
+    return {};
+  }
+  return transfers_[row_index].toMap();
 }
 
 void FileShareState::RemoveTransfer(qlonglong target_id) {

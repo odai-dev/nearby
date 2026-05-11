@@ -17,6 +17,8 @@
 #include <QSystemTrayIcon>
 #include <QVariantMap>
 
+#include <utility>
+
 namespace {
 
 constexpr char kNotificationsService[] = "org.freedesktop.Notifications";
@@ -108,26 +110,87 @@ void NotificationManager::ShowCopyableNotification(
                      trimmed_action_label);
 }
 
+void NotificationManager::ShowActionableNotification(
+    const QString& title, const QString& body, qlonglong share_target_id,
+    const QString& file_path, const QVariantList& actions) {
+  QStringList dbus_actions;
+  ActionState state;
+  state.share_target_id = share_target_id;
+  state.file_path = file_path;
+  for (const QVariant& action_value : actions) {
+    const QVariantMap action = action_value.toMap();
+    const QString key = action.value(QStringLiteral("key")).toString().trimmed();
+    const QString label =
+        action.value(QStringLiteral("label")).toString().trimmed();
+    if (key.isEmpty() || label.isEmpty()) {
+      continue;
+    }
+    dbus_actions.append(key);
+    dbus_actions.append(label);
+    state.action_labels.insert(key, label);
+  }
+
+  if (dbus_actions.isEmpty()) {
+    ShowNotification(title, body);
+    return;
+  }
+
+  if (supports_actions_) {
+    QDBusInterface notification_interface(
+        QString::fromLatin1(kNotificationsService),
+        QString::fromLatin1(kNotificationsPath),
+        QString::fromLatin1(kNotificationsInterface),
+        QDBusConnection::sessionBus());
+    const QString application_name = QCoreApplication::applicationName();
+    const QString notification_icon = EnsureNotificationIconPath();
+    QVariantMap hints{{QStringLiteral("desktop-entry"),
+                       QString::fromLatin1(kDesktopEntryId)}};
+    if (!notification_icon.isEmpty()) {
+      hints.insert(QStringLiteral("image-path"), notification_icon);
+    }
+    QDBusReply<uint> reply = notification_interface.call(
+        QStringLiteral("Notify"), application_name, static_cast<uint>(0),
+        notification_icon.isEmpty() ? QString::fromLatin1(kDesktopEntryId)
+                                    : notification_icon,
+        title, body, dbus_actions, hints, 8000);
+    if (reply.isValid()) {
+      notification_actions_.insert(reply.value(), std::move(state));
+      return;
+    }
+  }
+
+  ShowNotification(title, body);
+}
+
 void NotificationManager::OnActionInvoked(uint notification_id,
                                           const QString& action_key) {
-  if (action_key != QString::fromLatin1(kCopyActionId)) {
+  if (action_key == QString::fromLatin1(kCopyActionId)) {
+    auto it = copy_actions_.find(notification_id);
+    if (it == copy_actions_.end()) {
+      return;
+    }
+
+    CopyTextToClipboard(it->text_to_copy, QStringLiteral("Copied"),
+                        QStringLiteral("Copied to clipboard."));
+    copy_actions_.erase(it);
     return;
   }
 
-  auto it = copy_actions_.find(notification_id);
-  if (it == copy_actions_.end()) {
+  auto action_it = notification_actions_.find(notification_id);
+  if (action_it == notification_actions_.end() ||
+      !action_it->action_labels.contains(action_key)) {
     return;
   }
-
-  CopyTextToClipboard(it->text_to_copy, QStringLiteral("Copied"),
-                      QStringLiteral("Copied to clipboard."));
-  copy_actions_.erase(it);
+  emit notificationActionRequested(action_key, action_it->share_target_id,
+                                   action_it->file_path);
+  notification_actions_.erase(action_it);
 }
 
 void NotificationManager::OnNotificationClosed(uint notification_id,
                                                uint reason) {
   Q_UNUSED(reason);
   copy_actions_.remove(notification_id);
+  notification_actions_.remove(notification_id);
 }
 
 void NotificationManager::CopyTextToClipboard(
