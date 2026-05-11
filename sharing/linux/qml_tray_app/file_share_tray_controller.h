@@ -221,6 +221,9 @@ class FileShareTrayController : public QObject {
   void finishStopOperation(uint64_t generation);
   
   void updateTargetFromInfo(const NearbySharingApi::ShareTargetInfo& info);
+  bool shouldHideDiscoveredTarget(
+      const NearbySharingApi::ShareTargetInfo& info,
+      const QString& target_name) const;
   void handleTransferUpdate(const NearbySharingApi::TransferUpdateInfo& update);
   void handleTransferComplete(const NearbySharingApi::TransferUpdateInfo& update);
   void handleIncomingTransferComplete(const NearbySharingApi::TransferUpdateInfo& update,

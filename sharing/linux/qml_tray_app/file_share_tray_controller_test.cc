@@ -499,6 +499,92 @@ class FileShareTrayControllerTest : public QObject {
              QStringLiteral("Cancelled"));
   }
 
+  void selfShareTargetIsFilteredFromReceivers() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    NearbySharingApi::ShareTargetInfo target;
+    target.id = 101;
+    target.device_name = "My other device";
+    target.for_self_share = true;
+    service->listener.target_discovered_cb(target);
+
+    QCoreApplication::processEvents();
+    QCOMPARE(controller->discoveredTargets().size(), 0);
+  }
+
+  void localEchoTargetIsFilteredFromReceivers() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    NearbySharingApi::ShareTargetInfo target;
+    target.id = 102;
+    target.device_name = controller->deviceName().toStdString();
+    service->listener.target_discovered_cb(target);
+
+    QCoreApplication::processEvents();
+    QCOMPARE(controller->discoveredTargets().size(), 0);
+  }
+
+  void disabledPhoneTargetAppearsButCannotBeSelected() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    NearbySharingApi::ShareTargetInfo target;
+    target.id = 103;
+    target.device_name = "Nearby Android device";
+    target.receive_disabled = true;
+    target.is_actionable = false;
+    target.status_reason = "Set phone Quick Share visibility to Everyone";
+    service->listener.target_discovered_cb(target);
+    QTRY_COMPARE(controller->discoveredTargets().size(), 1);
+
+    const QVariantMap row = controller->discoveredTargets().first().toMap();
+    QCOMPARE(row.value(QStringLiteral("isActionable")).toBool(), false);
+    QCOMPARE(row.value(QStringLiteral("statusReason")).toString(),
+             QStringLiteral("Set phone Quick Share visibility to Everyone"));
+    QCOMPARE(controller->statusMessage(),
+             QStringLiteral("Phone detected, but not visible to everyone"));
+
+    controller->switchToSendModeWithText(QStringLiteral("hello"));
+    controller->sendPendingFilesToTarget(103);
+
+    QCOMPARE(service->send_text_calls, 0);
+    QCOMPARE(controller->statusMessage(),
+             QStringLiteral("Set phone Quick Share visibility to Everyone"));
+  }
+
+  void disabledPhoneTargetIsReplacedByActionableTarget() {
+    auto controller = CreateController();
+    auto service = services_.back();
+
+    NearbySharingApi::ShareTargetInfo target;
+    target.id = 104;
+    target.device_name = "Nearby Android device";
+    target.receive_disabled = true;
+    target.is_actionable = false;
+    target.status_reason = "Set phone Quick Share visibility to Everyone";
+    service->listener.target_discovered_cb(target);
+    QTRY_COMPARE(controller->discoveredTargets().size(), 1);
+
+    target.device_name = "Pixel 6 Pro";
+    target.receive_disabled = false;
+    target.is_actionable = true;
+    target.status_reason.clear();
+    service->listener.target_discovered_cb(target);
+    QTRY_COMPARE(controller->discoveredTargets().size(), 1);
+    QTRY_COMPARE(controller->discoveredTargets()
+                     .first()
+                     .toMap()
+                     .value(QStringLiteral("name"))
+                     .toString(),
+                 QStringLiteral("Pixel 6 Pro"));
+
+    const QVariantMap row = controller->discoveredTargets().first().toMap();
+    QCOMPARE(row.value(QStringLiteral("isActionable")).toBool(), true);
+    QCOMPARE(row.value(QStringLiteral("statusReason")).toString(), QString());
+  }
+
   void clipboardTextPreparesTextSend() {
     auto controller = CreateController();
     QClipboard* clipboard = QGuiApplication::clipboard();

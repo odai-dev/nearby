@@ -75,10 +75,13 @@ class FileShareState {
   void SetLogPath(const QString& path) { log_path_ = path; }
 
   // Target management
-  void AddOrUpdateTarget(qlonglong id, const QString& name, bool is_incoming);
+  void AddOrUpdateTarget(qlonglong id, const QString& name, bool is_incoming,
+                         bool is_actionable = true,
+                         const QString& status_reason = QString());
   void RemoveTarget(qlonglong id);
   QString GetTargetName(qlonglong id) const;
   bool HasTarget(qlonglong id) const;
+  bool IsTargetActionable(qlonglong id) const;
 
   // Transfer management
   void AddOrUpdateTransfer(qlonglong target_id, const QString& target_name,
@@ -132,6 +135,7 @@ class FileShareState {
   QVariantList discovered_targets_;
   QHash<qlonglong, int> discovered_row_by_target_;
   QHash<qlonglong, QString> target_names_;
+  QHash<qlonglong, bool> target_actionable_;
 
   // Transfers
   QVariantList transfers_;

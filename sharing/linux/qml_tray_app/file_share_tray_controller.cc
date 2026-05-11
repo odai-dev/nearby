@@ -467,8 +467,45 @@ void FileShareTrayController::updateTargetFromInfo(
   const QString name = StringUtils::TrimmedOrFallback(
       StringUtils::FromStdString(info.device_name),
       QStringLiteral("Unknown device"));
-  state_.AddOrUpdateTarget(info.id, name, info.is_incoming);
+
+  if (shouldHideDiscoveredTarget(info, name)) {
+    qInfo() << "self target filtered" << name << info.id;
+    state_.RemoveTarget(info.id);
+    emit discoveredTargetsChanged();
+    return;
+  }
+
+  const QString status_reason =
+      StringUtils::TrimmedFromStdString(info.status_reason);
+  const bool is_actionable =
+      info.is_actionable && !info.receive_disabled && status_reason.isEmpty();
+  if (!is_actionable) {
+    qInfo() << "unavailable target shown" << name << info.id << status_reason;
+    if (!status_reason.isEmpty()) {
+      setStatus(QStringLiteral("Phone detected, but not visible to everyone"));
+    }
+  }
+
+  state_.AddOrUpdateTarget(info.id, name, info.is_incoming, is_actionable,
+                           status_reason);
   emit discoveredTargetsChanged();
+}
+
+bool FileShareTrayController::shouldHideDiscoveredTarget(
+    const NearbySharingApi::ShareTargetInfo& info,
+    const QString& target_name) const {
+  if (info.for_self_share) {
+    return true;
+  }
+  if (info.is_incoming || info.receive_disabled ||
+      state_.HasActiveTransferForTarget(info.id)) {
+    return false;
+  }
+
+  const QString local_name = state_.deviceName().trimmed();
+  const QString host_name = QSysInfo::machineHostName().trimmed();
+  return (!local_name.isEmpty() && target_name == local_name) ||
+         (!host_name.isEmpty() && target_name == host_name);
 }
 
 void FileShareTrayController::handleTransferUpdate(
@@ -1397,6 +1434,28 @@ void FileShareTrayController::sendPendingFilesToTarget(
 void FileShareTrayController::sendPendingContentToTarget(
     qlonglong share_target_id) {
   if (share_target_id <= 0) {
+    return;
+  }
+  if (state_.HasTarget(share_target_id) &&
+      !state_.IsTargetActionable(share_target_id)) {
+    const QVariantMap target = [&]() {
+      for (const QVariant& value : state_.discoveredTargets()) {
+        const QVariantMap row = value.toMap();
+        if (row.value(QStringLiteral("id")).toLongLong() == share_target_id) {
+          return row;
+        }
+      }
+      return QVariantMap{};
+    }();
+    const QString reason =
+        target.value(QStringLiteral("statusReason")).toString().trimmed();
+    setStatus(reason.isEmpty() ? QStringLiteral("Receiver is not available")
+                               : reason);
+    emit requestTrayMessage(
+        QStringLiteral("Receiver unavailable"),
+        reason.isEmpty()
+            ? QStringLiteral("Choose another nearby device.")
+            : reason);
     return;
   }
   if (!service_) {

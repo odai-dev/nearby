@@ -208,6 +208,20 @@ ApplicationWindow {
                                 }
                             }
                         }
+
+                        Label {
+                            Layout.fillWidth: true
+                            visible: fileShareController.discoveredTargets.length === 0
+                                     && fileShareController.mode === "Send"
+                            text: fileShareController.statusMessage === "Phone detected, but not visible to everyone"
+                                  ? "Set phone Quick Share visibility to Everyone"
+                                  : "No nearby receivers yet"
+                            color: "#a1a1aa"
+                            font.pixelSize: root.compact ? 12 : 13
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
                     }
                 }
 

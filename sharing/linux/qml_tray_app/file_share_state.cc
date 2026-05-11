@@ -63,8 +63,10 @@ void FileShareState::ClearPendingSend() {
 }
 
 void FileShareState::AddOrUpdateTarget(qlonglong id, const QString& name,
-                                       bool is_incoming) {
+                                       bool is_incoming, bool is_actionable,
+                                       const QString& status_reason) {
   target_names_[id] = name;
+  target_actionable_[id] = is_actionable;
 
   if (discovered_row_by_target_.contains(id)) {
     const int row_index = discovered_row_by_target_.value(id);
@@ -73,6 +75,8 @@ void FileShareState::AddOrUpdateTarget(qlonglong id, const QString& name,
       target[QStringLiteral("id")] = id;
       target[QStringLiteral("name")] = name;
       target[QStringLiteral("isIncoming")] = is_incoming;
+      target[QStringLiteral("isActionable")] = is_actionable;
+      target[QStringLiteral("statusReason")] = status_reason;
       discovered_targets_[row_index] = target;
       return;
     }
@@ -82,6 +86,8 @@ void FileShareState::AddOrUpdateTarget(qlonglong id, const QString& name,
   target[QStringLiteral("id")] = id;
   target[QStringLiteral("name")] = name;
   target[QStringLiteral("isIncoming")] = is_incoming;
+  target[QStringLiteral("isActionable")] = is_actionable;
+  target[QStringLiteral("statusReason")] = status_reason;
   discovered_row_by_target_[id] = discovered_targets_.size();
   discovered_targets_.append(target);
 }
@@ -95,6 +101,7 @@ void FileShareState::RemoveTarget(qlonglong id) {
   RemovePendingTargetRemoval(id);
   if (!transfer_row_by_target_.contains(id)) {
     target_names_.remove(id);
+    target_actionable_.remove(id);
   }
 
   if (!discovered_row_by_target_.contains(id)) {
@@ -122,6 +129,10 @@ QString FileShareState::GetTargetName(qlonglong id) const {
 
 bool FileShareState::HasTarget(qlonglong id) const {
   return discovered_row_by_target_.contains(id);
+}
+
+bool FileShareState::IsTargetActionable(qlonglong id) const {
+  return target_actionable_.value(id, false);
 }
 
 void FileShareState::AddOrUpdateTransfer(
@@ -266,6 +277,7 @@ void FileShareState::ClearAll() {
   discovered_targets_.clear();
   discovered_row_by_target_.clear();
   target_names_.clear();
+  target_actionable_.clear();
   transfers_.clear();
   transfer_row_by_target_.clear();
   pending_target_removals_.clear();

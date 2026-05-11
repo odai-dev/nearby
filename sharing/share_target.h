@@ -62,6 +62,9 @@ struct ShareTarget {
   uint8_t vendor_id = 0;
   // True if the share target is not ready for receiving.
   bool receive_disabled = false;
+  // Human-readable reason shown by app surfaces when the target is detected
+  // but cannot be selected for sending.
+  std::string status_reason;
 };
 
 }  // namespace sharing

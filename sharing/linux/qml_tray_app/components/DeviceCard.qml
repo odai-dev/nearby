@@ -23,9 +23,15 @@ Item {
     readonly property int avatarInset: compact ? 8 : 9
     readonly property int checkSize: compact ? 24 : 28
     readonly property int ringLineWidth: compact ? 4 : 5
+    readonly property bool isActionable: !modelData
+                                         || modelData.isActionable === undefined
+                                         || modelData.isActionable
+    readonly property string statusReason: modelData && modelData.statusReason
+                                           ? String(modelData.statusReason) : ""
     property bool canSend: fileShareController.mode === "Send"
                                     && fileShareController.pendingSendFileCount > 0
                                     && !isTransferActive
+                                    && isActionable
 
     readonly property string targetName: modelData && modelData.name && modelData.name.length > 0
                                          ? modelData.name : "Unknown device"
@@ -106,7 +112,7 @@ Item {
             height: root.avatarSize
             radius: width / 2
             color: surface
-            opacity: canSend ? 1.0 : 0.5
+            opacity: root.isActionable ? (canSend ? 1.0 : 0.55) : 0.38
 
             Canvas {
                 id: progressRing
@@ -161,7 +167,7 @@ Item {
                     text: initialLetter(targetName)
                     font.pixelSize: compact ? 24 : 28
                     font.weight: Font.DemiBold
-                    color: textPrimary
+                    color: root.isActionable ? textPrimary : textMuted
                 }
             }
 
@@ -216,7 +222,20 @@ Item {
             elide: Text.ElideRight
             maximumLineCount: 2
             wrapMode: Text.Wrap
-            color: textPrimary
+            color: root.isActionable ? textPrimary : textMuted
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            visible: !root.isActionable && root.statusReason.length > 0
+            text: root.statusReason
+            font.pixelSize: compact ? 9 : 10
+            color: "#fbbf24"
+            wrapMode: Text.WordWrap
+            maximumLineCount: 3
+            elide: Text.ElideRight
         }
 
         Label {

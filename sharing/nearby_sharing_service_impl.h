@@ -409,6 +409,8 @@ class NearbySharingServiceImpl
   void NotifyShareTargetDiscovered(const ShareTarget& share_target);
   void NotifyShareTargetUpdated(const ShareTarget& share_target);
   void NotifyShareTargetLost(const ShareTarget& share_target);
+  void NotifyUnavailableShareTarget(absl::string_view endpoint_id);
+  void RemoveUnavailableShareTarget(absl::string_view endpoint_id);
 
   // Log analytics event of discovering share target.
   void LogShareTargetDiscovered(const ShareTarget& share_target);
@@ -469,6 +471,7 @@ class NearbySharingServiceImpl
   std::optional<std::tuple<ShareTarget, std::unique_ptr<AttachmentContainer>,
                            TransferMetadata>>
       last_outgoing_metadata_;
+  absl::flat_hash_map<std::string, ShareTarget> unavailable_outgoing_targets_;
   // A map of ShareTarget id to IncomingShareSession. This lets us know which
   // Nearby Connections endpoint and public certificate are related to the
   // incoming share target.

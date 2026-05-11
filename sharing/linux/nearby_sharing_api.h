@@ -60,6 +60,10 @@ class __attribute__((visibility("default"))) NearbySharingApi {
     std::string device_name;
     bool is_incoming = false;
     int device_type = 0;
+    bool for_self_share = false;
+    bool receive_disabled = false;
+    bool is_actionable = true;
+    std::string status_reason;
   };
 
   struct TextAttachmentInfo {

@@ -1651,6 +1651,7 @@ void NearbySharingServiceImpl::HandleEndpointLost(
 
   discovered_advertisements_to_retry_map_.erase(endpoint_id);
   discovered_advertisements_retried_set_.erase(endpoint_id);
+  RemoveUnavailableShareTarget(endpoint_id);
   outgoing_targets_manager_.OnShareTargetLost(
       std::string(endpoint_id),
       Milliseconds(NearbyFlags::GetInstance().GetInt64Flag(
@@ -1716,6 +1717,35 @@ void NearbySharingServiceImpl::NotifyShareTargetLost(
   }
 }
 
+void NearbySharingServiceImpl::NotifyUnavailableShareTarget(
+    absl::string_view endpoint_id) {
+  auto [it, inserted] = unavailable_outgoing_targets_.try_emplace(
+      std::string(endpoint_id));
+  ShareTarget& target = it->second;
+  target.device_name = "Nearby Android device";
+  target.type = ShareTargetType::kPhone;
+  target.is_incoming = false;
+  target.receive_disabled = true;
+  target.status_reason = "Set phone Quick Share visibility to Everyone";
+
+  LOG(INFO) << "unresolved nearby endpoint detected: endpoint_id="
+            << endpoint_id << ", share_target=" << target.ToString();
+  if (inserted) {
+    NotifyShareTargetDiscovered(target);
+  } else {
+    NotifyShareTargetUpdated(target);
+  }
+}
+
+void NearbySharingServiceImpl::RemoveUnavailableShareTarget(
+    absl::string_view endpoint_id) {
+  auto node = unavailable_outgoing_targets_.extract(std::string(endpoint_id));
+  if (node.empty()) {
+    return;
+  }
+  NotifyShareTargetLost(node.mapped());
+}
+
 void NearbySharingServiceImpl::OnOutgoingDecryptedCertificate(
     absl::string_view endpoint_id, absl::Span<const uint8_t> endpoint_info,
     const Advertisement& advertisement,
@@ -1739,12 +1769,19 @@ void NearbySharingServiceImpl::OnOutgoingDecryptedCertificate(
               << ": Failed to convert discovered advertisement to share "
               << "target. Ignoring endpoint: " << endpoint_id
               << " until next certificate download.";
+    NotifyUnavailableShareTarget(endpoint_id);
     std::vector<uint8_t> endpoint_info_data(endpoint_info.begin(),
                                             endpoint_info.end());
 
     discovered_advertisements_to_retry_map_[endpoint_id] = endpoint_info_data;
     FinishEndpointDiscoveryEvent();
     return;
+  }
+  auto unavailable_it =
+      unavailable_outgoing_targets_.find(std::string(endpoint_id));
+  if (unavailable_it != unavailable_outgoing_targets_.end()) {
+    share_target->id = unavailable_it->second.id;
+    unavailable_outgoing_targets_.erase(unavailable_it);
   }
   LogShareTargetDiscovered(*share_target);
   outgoing_targets_manager_.OnShareTargetDiscovered(*share_target, endpoint_id,
