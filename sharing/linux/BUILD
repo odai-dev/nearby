@@ -138,3 +138,12 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "nearby_sharing_api_test",
+    srcs = ["nearby_sharing_api_test.cc"],
+    deps = [
+        ":nearby_sharing_api",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

@@ -1,9 +1,11 @@
 #include "sharing/linux/nearby_sharing_api.h"
 
+#include <filesystem>
 #include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -235,6 +237,23 @@ std::string GenerateQrCodeUrl() {
                   key_data.size()),
       &encoded);
   return "https://quickshare.google/qrcode#key=" + encoded;
+}
+
+bool PathExists(const char* path) {
+  std::error_code error;
+  return std::filesystem::exists(path, error);
+}
+
+bool DirectoryHasEntries(const char* path) {
+  std::error_code error;
+  if (!std::filesystem::is_directory(path, error)) {
+    return false;
+  }
+  std::filesystem::directory_iterator it(path, error);
+  if (error) {
+    return false;
+  }
+  return it != std::filesystem::directory_iterator();
 }
 
 }  // namespace
@@ -517,30 +536,23 @@ void NearbySharingApi::StopReceiveMode(std::function<void(StatusCode)> callback)
 void NearbySharingApi::SendFile(int64_t share_target_id,
                                 const std::string& file_path,
                                 std::function<void(StatusCode)> callback) {
+  const StatusCode validation_status = ValidateSendFilePaths({file_path});
+  if (validation_status != StatusCode::kOk) {
+    if (callback) {
+      callback(validation_status);
+    }
+    return;
+  }
+
   if (impl_->service == nullptr) {
     if (callback) {
       callback(StatusCode::kError);
     }
     return;
   }
-  if (file_path.empty()) {
-    if (callback) {
-      callback(StatusCode::kInvalidArgument);
-    }
-    return;
-  }
 
   FilePath path(file_path);
   std::optional<uintmax_t> file_size = nearby::Files::GetFileSize(path);
-  if (!file_size.has_value() || *file_size == 0 ||
-      *file_size >
-          static_cast<uintmax_t>(std::numeric_limits<int64_t>::max())) {
-    if (callback) {
-      callback(StatusCode::kInvalidArgument);
-    }
-    return;
-  }
-
   nearby::sharing::AttachmentContainer::Builder builder;
   nearby::sharing::FileAttachment attachment(path);
   attachment.set_size(static_cast<int64_t>(*file_size));
@@ -567,39 +579,25 @@ void NearbySharingApi::SendFile(int64_t share_target_id,
 void NearbySharingApi::SendFiles(int64_t share_target_id,
                                  const std::vector<std::string>& file_paths,
                                  std::function<void(StatusCode)> callback) {
+  const StatusCode validation_status = ValidateSendFilePaths(file_paths);
+  if (validation_status != StatusCode::kOk) {
+    if (callback) {
+      callback(validation_status);
+    }
+    return;
+  }
+
   if (impl_->service == nullptr) {
     if (callback) {
       callback(StatusCode::kError);
     }
     return;
   }
-  if (file_paths.empty()) {
-    if (callback) {
-      callback(StatusCode::kInvalidArgument);
-    }
-    return;
-  }
 
   nearby::sharing::AttachmentContainer::Builder builder;
   for (const std::string& file_path : file_paths) {
-    if (file_path.empty()) {
-      if (callback) {
-        callback(StatusCode::kInvalidArgument);
-      }
-      return;
-    }
-
     FilePath path(file_path);
     std::optional<uintmax_t> file_size = nearby::Files::GetFileSize(path);
-    if (!file_size.has_value() || *file_size == 0 ||
-        *file_size >
-            static_cast<uintmax_t>(std::numeric_limits<int64_t>::max())) {
-      if (callback) {
-        callback(StatusCode::kInvalidArgument);
-      }
-      return;
-    }
-
     nearby::sharing::FileAttachment attachment(path);
     attachment.set_size(static_cast<int64_t>(*file_size));
     builder.AddFileAttachment(std::move(attachment));
@@ -717,6 +715,63 @@ std::string NearbySharingApi::GetQrCodeUrl() const {
     impl_->qr_code_url = GenerateQrCodeUrl();
   }
   return impl_->qr_code_url;
+}
+
+NearbySharingApi::DiagnosticInfo NearbySharingApi::GetDiagnostics() const {
+  return CollectDiagnostics();
+}
+
+NearbySharingApi::DiagnosticInfo NearbySharingApi::CollectDiagnostics() {
+  DiagnosticInfo info;
+  info.dbus_available = PathExists("/run/dbus/system_bus_socket") ||
+                        PathExists("/var/run/dbus/system_bus_socket");
+  info.bluetooth_available = DirectoryHasEntries("/sys/class/bluetooth");
+  info.network_manager_available = PathExists("/run/NetworkManager") ||
+                                   PathExists("/var/run/NetworkManager");
+  info.avahi_available = PathExists("/run/avahi-daemon/socket") ||
+                         PathExists("/var/run/avahi-daemon/socket");
+
+  if (!info.dbus_available) {
+    info.warnings.push_back(
+        "D-Bus system bus was not found; Bluetooth and network discovery may fail.");
+  }
+  if (!info.bluetooth_available) {
+    info.warnings.push_back(
+        "No Bluetooth adapter was detected; nearby device discovery may fail.");
+  }
+  if (!info.network_manager_available) {
+    info.warnings.push_back(
+        "NetworkManager was not detected; Wi-Fi transfer upgrades may fail.");
+  }
+  if (!info.avahi_available) {
+    info.warnings.push_back(
+        "Avahi was not detected; local-network discovery may be limited.");
+  }
+
+  return info;
+}
+
+NearbySharingApi::StatusCode NearbySharingApi::ValidateSendFilePaths(
+    const std::vector<std::string>& file_paths) {
+  if (file_paths.empty()) {
+    return StatusCode::kInvalidArgument;
+  }
+
+  for (const std::string& file_path : file_paths) {
+    if (file_path.empty()) {
+      return StatusCode::kInvalidArgument;
+    }
+
+    FilePath path(file_path);
+    std::optional<uintmax_t> file_size = nearby::Files::GetFileSize(path);
+    if (!file_size.has_value() || *file_size == 0 ||
+        *file_size >
+            static_cast<uintmax_t>(std::numeric_limits<int64_t>::max())) {
+      return StatusCode::kInvalidArgument;
+    }
+  }
+
+  return StatusCode::kOk;
 }
 
 std::string NearbySharingApi::StatusCodeToString(StatusCode status) {

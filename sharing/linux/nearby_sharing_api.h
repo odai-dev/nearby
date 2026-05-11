@@ -92,6 +92,14 @@ class __attribute__((visibility("default"))) NearbySharingApi {
     std::function<void(const TransferUpdateInfo&)> transfer_update_cb;
   };
 
+  struct DiagnosticInfo {
+    bool dbus_available = false;
+    bool bluetooth_available = false;
+    bool network_manager_available = false;
+    bool avahi_available = false;
+    std::vector<std::string> warnings;
+  };
+
   NearbySharingApi();
   explicit NearbySharingApi(std::string device_name_override);
   ~NearbySharingApi();
@@ -122,6 +130,10 @@ class __attribute__((visibility("default"))) NearbySharingApi {
 
   void Shutdown(std::function<void(StatusCode)> callback);
   std::string GetQrCodeUrl() const;
+  DiagnosticInfo GetDiagnostics() const;
+  static DiagnosticInfo CollectDiagnostics();
+  static StatusCode ValidateSendFilePaths(
+      const std::vector<std::string>& file_paths);
 
   static std::string StatusCodeToString(StatusCode status);
   static std::string TransferStatusToString(TransferStatus status);
