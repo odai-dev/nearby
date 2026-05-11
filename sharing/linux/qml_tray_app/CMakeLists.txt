@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 DBus)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 DBus Test)
 
 # Where the Bazel-built Nearby .so and header were installed
 set(NEARBY_PREFIX "/usr/local" CACHE PATH "Install prefix for the Nearby shared library")
@@ -78,3 +78,42 @@ install(TARGETS nearby_qml_file_tray_app RUNTIME DESTINATION "${CMAKE_INSTALL_BI
 install(FILES "${NEARBY_SHARING_LIB}" DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES "${SDBUS_CPP_RUNTIME_LIB_REALPATH}" DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RENAME "libsdbus-c++.so.2")
+
+enable_testing()
+
+qt_add_executable(nearby_qml_file_tray_app_tests
+  file_share_tray_controller_test.cc
+  file_share_tray_controller.cc
+  file_share_tray_controller.h
+  file_share_state.cc
+  file_share_state.h
+  share_target_model.h
+  transfer_model.h
+  string_utils.cc
+  string_utils.h
+  status_mapper.cc
+  status_mapper.h
+  qr_code_generator.cc
+  qr_code_generator.h
+  notification_manager.cpp
+  notification_manager.h
+  third_party/libqrencode/qrencode_compat.h
+)
+
+target_include_directories(nearby_qml_file_tray_app_tests PRIVATE
+  "${NEARBY_SHARING_INCLUDE}")
+
+target_link_libraries(nearby_qml_file_tray_app_tests PRIVATE
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2
+  Qt6::DBus Qt6::Test
+  "${QRENCODE_LIB}"
+  "${NEARBY_SHARING_LIB}"
+  "${SDBUS_CPP_LIB}"
+)
+
+set_target_properties(nearby_qml_file_tray_app_tests PROPERTIES
+  BUILD_RPATH "${NEARBY_SHARING_LIB_DIR};${NEARBY_PREFIX}/lib"
+)
+
+add_test(NAME nearby_qml_file_tray_app_tests
+         COMMAND nearby_qml_file_tray_app_tests)
