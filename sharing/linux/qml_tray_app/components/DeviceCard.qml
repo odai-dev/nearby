@@ -25,6 +25,7 @@ Item {
     readonly property int ringLineWidth: compact ? 4 : 5
     property bool canSend: fileShareController.mode === "Send"
                                     && fileShareController.pendingSendFileCount > 0
+                                    && !isTransferActive
 
     readonly property string targetName: modelData && modelData.name && modelData.name.length > 0
                                          ? modelData.name : "Unknown device"
@@ -33,6 +34,7 @@ Item {
     readonly property bool hasTransfer: transferData !== null
     readonly property bool isTransferActive: transferStatus === "InProgress"
                                              || transferStatus === "Queued"
+                                             || transferStatus === "Cancelling"
                                              || transferStatus === "Connecting"
                                              || transferStatus === "AwaitingLocalConfirmation"
                                              || transferStatus === "AwaitingRemoteAcceptance"
@@ -269,6 +271,29 @@ Item {
             clip: true
             elide: Text.ElideRight
             maximumLineCount: 1
+        }
+
+        Button {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: isTransferActive && transferStatus !== "Cancelling"
+            text: "Cancel"
+            flat: true
+            contentItem: Text {
+                text: parent.text
+                color: "#fecaca"
+                font.pixelSize: compact ? 10 : 11
+                font.weight: Font.Medium
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                implicitWidth: compact ? 58 : 64
+                implicitHeight: compact ? 26 : 28
+                color: parent.pressed ? "#7f1d1d" : "#450a0a"
+                border.color: "#991b1b"
+                radius: 14
+            }
+            onClicked: fileShareController.cancelTransfer(modelData.id)
         }
     }
 

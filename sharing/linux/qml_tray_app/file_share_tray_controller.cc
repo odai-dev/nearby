@@ -1,5 +1,6 @@
 #include "file_share_tray_controller.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -27,6 +28,83 @@
 namespace {
 
 constexpr char kAutostartFileName[] = "nearby-file-share.desktop";
+
+class NearbySharingApiService final : public NearbySharingServiceInterface {
+ public:
+  explicit NearbySharingApiService(const QString& device_name)
+      : api_(device_name.toStdString()) {}
+
+  void SetListener(NearbySharingApi::Listener listener) override {
+    api_.SetListener(std::move(listener));
+  }
+
+  void StartSendMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.StartSendMode(std::move(callback));
+  }
+
+  void StopSendMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.StopSendMode(std::move(callback));
+  }
+
+  void StartReceiveMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.StartReceiveMode(std::move(callback));
+  }
+
+  void StopReceiveMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.StopReceiveMode(std::move(callback));
+  }
+
+  void SendFiles(
+      qlonglong share_target_id, const std::vector<std::string>& file_paths,
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.SendFiles(share_target_id, file_paths, std::move(callback));
+  }
+
+  void Accept(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.Accept(share_target_id, std::move(callback));
+  }
+
+  void Reject(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.Reject(share_target_id, std::move(callback));
+  }
+
+  void Cancel(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.Cancel(share_target_id, std::move(callback));
+  }
+
+  void Set5GhzHotspotEnabled(bool enabled) override {
+    api_.Set5GhzHotspotEnabled(enabled);
+  }
+
+  void Shutdown(
+      std::function<void(NearbySharingApi::StatusCode)> callback) override {
+    api_.Shutdown(std::move(callback));
+  }
+
+  std::string GetQrCodeUrl() const override { return api_.GetQrCodeUrl(); }
+
+  NearbySharingApi::DiagnosticInfo GetDiagnostics() const override {
+    return api_.GetDiagnostics();
+  }
+
+ private:
+  NearbySharingApi api_;
+};
+
+std::unique_ptr<NearbySharingServiceInterface> CreateNearbySharingService(
+    const QString& device_name) {
+  return std::make_unique<NearbySharingApiService>(device_name);
+}
 
 QString AutostartDirectoryPath() {
   const QString config_path =
@@ -72,7 +150,11 @@ QString AutostartDesktopEntry() {
 }  // namespace
 
 FileShareTrayController::FileShareTrayController(QObject* parent)
-    : QObject(parent) {
+    : FileShareTrayController(CreateNearbySharingService, parent) {}
+
+FileShareTrayController::FileShareTrayController(ServiceFactory service_factory,
+                                                 QObject* parent)
+    : QObject(parent), service_factory_(std::move(service_factory)) {
   const QString host = QSysInfo::machineHostName().trimmed();
   if (!host.isEmpty()) {
     state_.SetDeviceName(host);
@@ -83,15 +165,28 @@ FileShareTrayController::FileShareTrayController(QObject* parent)
 }
 
 FileShareTrayController::~FileShareTrayController() {
-  stop();
   if (service_) {
+    ++operation_generation_;
+    ++service_generation_;
+    service_->SetListener({});
+    service_->StopSendMode([](NearbySharingApi::StatusCode) {});
+    service_->StopReceiveMode([](NearbySharingApi::StatusCode) {});
     service_->Shutdown([](NearbySharingApi::StatusCode) {});
   }
 }
 
 void FileShareTrayController::initializeService() {
-  service_ = std::make_unique<NearbySharingApi>(state_.deviceName().toStdString());
+  ++service_generation_;
+  service_ = service_factory_(state_.deviceName());
+  if (!service_) {
+    refreshDiagnostics();
+    setStatus(QStringLiteral("Sharing service is not available"));
+    emit requestTrayMessage(QStringLiteral("Sharing unavailable"),
+                            QStringLiteral("Could not create sharing service."));
+    return;
+  }
   service_->Set5GhzHotspotEnabled(state_.enable5GhzHotspot());
+  refreshDiagnostics();
   state_.SetQrCodeData(QString::fromStdString(service_->GetQrCodeUrl()), {}, 0);
   updateQrCodeData();
   emit qrCodeUrlChanged();
@@ -111,21 +206,60 @@ void FileShareTrayController::updateQrCodeData() {
 
 bool FileShareTrayController::normalizeFileSelection(
     const QStringList& file_paths, QStringList* normalized_paths,
-    QStringList* file_names) const {
+    QStringList* file_names, QString* error_message) const {
   normalized_paths->clear();
   file_names->clear();
 
   if (file_paths.isEmpty()) {
+    if (error_message != nullptr) {
+      *error_message = QStringLiteral("No files were selected.");
+    }
     return false;
   }
 
   for (const QString& file_path : file_paths) {
-    if (file_path.trimmed().isEmpty()) {
+    const QString trimmed_path = file_path.trimmed();
+    if (trimmed_path.isEmpty()) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("One selected file path was empty.");
+      }
       return false;
     }
 
-    QFileInfo info(file_path);
-    if (!info.exists() || !info.isFile()) {
+    QFileInfo info(trimmed_path);
+    if (!info.exists()) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("%1 does not exist.")
+                             .arg(QDir::toNativeSeparators(trimmed_path));
+      }
+      return false;
+    }
+    if (info.isDir()) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("%1 is a folder. Folder sharing is not supported yet.")
+                             .arg(QDir::toNativeSeparators(info.absoluteFilePath()));
+      }
+      return false;
+    }
+    if (!info.isFile()) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("%1 is not a regular file.")
+                             .arg(QDir::toNativeSeparators(info.absoluteFilePath()));
+      }
+      return false;
+    }
+    if (!info.isReadable()) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("%1 is not readable.")
+                             .arg(QDir::toNativeSeparators(info.absoluteFilePath()));
+      }
+      return false;
+    }
+    if (info.size() <= 0) {
+      if (error_message != nullptr) {
+        *error_message = QStringLiteral("%1 is empty. Empty files cannot be sent.")
+                             .arg(QDir::toNativeSeparators(info.absoluteFilePath()));
+      }
       return false;
     }
 
@@ -198,28 +332,48 @@ QString FileShareTrayController::transferFileSummary(
 
 void FileShareTrayController::attachServiceListeners() {
   NearbySharingApi::Listener listener;
+  const uint64_t service_generation = service_generation_;
 
-  listener.target_discovered_cb = [this](const NearbySharingApi::ShareTargetInfo& info) {
-    QMetaObject::invokeMethod(this, [this, info]() { updateTargetFromInfo(info); },
+  listener.target_discovered_cb = [this, service_generation](const NearbySharingApi::ShareTargetInfo& info) {
+    const uint64_t generation = service_generation;
+    QMetaObject::invokeMethod(this, [this, info, generation]() {
+                                if (isCurrentService(generation)) {
+                                  updateTargetFromInfo(info);
+                                }
+                              },
                               Qt::QueuedConnection);
   };
 
-  listener.target_updated_cb = [this](const NearbySharingApi::ShareTargetInfo& info) {
-    QMetaObject::invokeMethod(this, [this, info]() { updateTargetFromInfo(info); },
+  listener.target_updated_cb = [this, service_generation](const NearbySharingApi::ShareTargetInfo& info) {
+    const uint64_t generation = service_generation;
+    QMetaObject::invokeMethod(this, [this, info, generation]() {
+                                if (isCurrentService(generation)) {
+                                  updateTargetFromInfo(info);
+                                }
+                              },
                               Qt::QueuedConnection);
   };
 
-  listener.target_lost_cb = [this](int64_t share_target_id) {
+  listener.target_lost_cb = [this, service_generation](int64_t share_target_id) {
+    const uint64_t generation = service_generation;
     QMetaObject::invokeMethod(
-        this, [this, share_target_id]() {
+        this, [this, share_target_id, generation]() {
+          if (!isCurrentService(generation)) {
+            return;
+          }
           state_.RemoveTarget(share_target_id);
           emit discoveredTargetsChanged();
         },
         Qt::QueuedConnection);
   };
 
-  listener.transfer_update_cb = [this](const NearbySharingApi::TransferUpdateInfo& update) {
-    QMetaObject::invokeMethod(this, [this, update]() { handleTransferUpdate(update); },
+  listener.transfer_update_cb = [this, service_generation](const NearbySharingApi::TransferUpdateInfo& update) {
+    const uint64_t generation = service_generation;
+    QMetaObject::invokeMethod(this, [this, update, generation]() {
+                                if (isCurrentService(generation)) {
+                                  handleTransferUpdate(update);
+                                }
+                              },
                               Qt::QueuedConnection);
   };
 
@@ -377,7 +531,7 @@ void FileShareTrayController::loadSettings() {
   }
 
   const bool stored_auto_accept =
-      settings.value(QStringLiteral("autoAcceptIncoming"), true).toBool();
+      settings.value(QStringLiteral("autoAcceptIncoming"), false).toBool();
   state_.SetAutoAcceptIncoming(stored_auto_accept);
 
   const bool stored_enable_5ghz_hotspot =
@@ -413,13 +567,33 @@ void FileShareTrayController::setDeviceName(const QString& device_name) {
     return;
   }
 
+  const bool should_restart = state_.running();
   state_.SetDeviceName(trimmed);
   saveSettings();
   emit deviceNameChanged();
 
-  if (state_.running()) {
-    stop();
-    initializeService();
+  if (service_) {
+    nextOperationGeneration();
+    ++service_generation_;
+    stopping_ = false;
+    service_->SetListener({});
+    service_->StopSendMode([](NearbySharingApi::StatusCode) {});
+    service_->StopReceiveMode([](NearbySharingApi::StatusCode) {});
+    service_->Shutdown([](NearbySharingApi::StatusCode) {});
+    service_.reset();
+  }
+
+  if (should_restart) {
+    state_.SetRunning(false);
+    emit runningChanged();
+  }
+
+  state_.ClearAll();
+  emit discoveredTargetsChanged();
+  emit transfersChanged();
+
+  initializeService();
+  if (should_restart) {
     start();
   }
 }
@@ -464,6 +638,7 @@ void FileShareTrayController::setStartOnLogin(bool enabled) {
   state_.SetStartOnLogin(enabled);
   saveSettings();
   emit startOnLoginChanged();
+
 }
 
 void FileShareTrayController::setLogPath(const QString& path) {
@@ -533,27 +708,151 @@ bool FileShareTrayController::applyAutostartSetting(
   return true;
 }
 
+uint64_t FileShareTrayController::nextOperationGeneration() {
+  return ++operation_generation_;
+}
+
+bool FileShareTrayController::isCurrentOperation(uint64_t generation) const {
+  return generation == operation_generation_ && !stopping_;
+}
+
+bool FileShareTrayController::isCurrentService(uint64_t generation) const {
+  return generation == service_generation_ && !stopping_;
+}
+
+QString FileShareTrayController::diagnosticWarningsToSummary(
+    const NearbySharingApi::DiagnosticInfo& diagnostics) const {
+  QStringList warnings;
+  warnings.reserve(static_cast<int>(diagnostics.warnings.size()));
+  for (const std::string& warning : diagnostics.warnings) {
+    warnings.append(QString::fromStdString(warning));
+  }
+  return warnings.join(QStringLiteral(" "));
+}
+
+void FileShareTrayController::refreshDiagnostics() {
+  if (!service_) {
+    if (!diagnostics_summary_.isEmpty()) {
+      diagnostics_summary_.clear();
+      emit diagnosticsChanged();
+    }
+    return;
+  }
+
+  const QString summary = diagnosticWarningsToSummary(service_->GetDiagnostics());
+  if (summary == diagnostics_summary_) {
+    return;
+  }
+  diagnostics_summary_ = summary;
+  emit diagnosticsChanged();
+}
+
+void FileShareTrayController::emitDiagnosticsWarningIfNeeded(
+    const QString& operation_name) {
+  refreshDiagnostics();
+  if (diagnostics_summary_.isEmpty()) {
+    return;
+  }
+
+  emit requestTrayMessage(
+      QStringLiteral("Sharing may be limited"),
+      QStringLiteral("%1 requested, but: %2").arg(operation_name, diagnostics_summary_));
+}
+
 void FileShareTrayController::start() {
   if (state_.running()) {
     return;
   }
+  if (!service_) {
+    initializeService();
+  }
 
+  stopping_ = false;
   state_.SetRunning(true);
   emit runningChanged();
 
+  if (state_.pendingSendFileCount() > 0) {
+    startSendMode();
+    state_.SetMode(QStringLiteral("Send"));
+  } else {
+    startReceiveMode();
+    state_.SetMode(QStringLiteral("Receive"));
+  }
+  emit modeChanged();
 }
 
 void FileShareTrayController::stop() {
-  if (!state_.running()) {
+  if (!state_.running() && !stopping_) {
     return;
   }
 
+  const uint64_t generation = nextOperationGeneration();
+  stopping_ = true;
   state_.SetRunning(false);
   emit runningChanged();
 
-  service_->StopSendMode([](NearbySharingApi::StatusCode) {});
-  service_->StopReceiveMode([](NearbySharingApi::StatusCode) {});
+  if (!service_) {
+    finishStopOperation(generation);
+    return;
+  }
 
+  auto pending_callbacks = std::make_shared<int>(2);
+  auto finished = std::make_shared<bool>(false);
+  auto finish_once = [this, generation, pending_callbacks, finished]() {
+    if (*finished) {
+      return;
+    }
+    --(*pending_callbacks);
+    if (*pending_callbacks > 0) {
+      return;
+    }
+    *finished = true;
+    finishStopOperation(generation);
+  };
+
+  service_->StopSendMode([this, generation, finish_once](NearbySharingApi::StatusCode status) {
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation, status, finish_once]() {
+          if (generation == operation_generation_ &&
+              status != NearbySharingApi::StatusCode::kOk &&
+              status != NearbySharingApi::StatusCode::kStatusAlreadyStopped) {
+            setStatus(QStringLiteral("StopSendMode failed: %1")
+                          .arg(StatusMapper::ApiStatusToString(status)));
+          }
+          finish_once();
+        },
+        Qt::QueuedConnection);
+  });
+  service_->StopReceiveMode(
+      [this, generation, finish_once](NearbySharingApi::StatusCode status) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, status, finish_once]() {
+              if (generation == operation_generation_ &&
+                  status != NearbySharingApi::StatusCode::kOk &&
+                  status != NearbySharingApi::StatusCode::kStatusAlreadyStopped) {
+                setStatus(QStringLiteral("StopReceiveMode failed: %1")
+                              .arg(StatusMapper::ApiStatusToString(status)));
+              }
+              finish_once();
+            },
+            Qt::QueuedConnection);
+      });
+
+  QTimer::singleShot(1500, this, [this, generation, finished]() {
+    if (*finished || generation != operation_generation_) {
+      return;
+    }
+    *finished = true;
+    finishStopOperation(generation);
+  });
+}
+
+void FileShareTrayController::finishStopOperation(uint64_t generation) {
+  if (generation != operation_generation_) {
+    return;
+  }
   if (state_.pendingSendFileCount() > 0) {
     clearPendingSendState();
   }
@@ -562,47 +861,136 @@ void FileShareTrayController::stop() {
   emit transfersChanged();
 
   setStatus(QStringLiteral("Stopped"));
+  stopping_ = false;
 }
 
 void FileShareTrayController::startSendMode() {
-  service_->StopReceiveMode([this](NearbySharingApi::StatusCode status) {
+  if (!service_) {
+    setStatus(QStringLiteral("Sharing service is not available"));
+    emit requestTrayMessage(QStringLiteral("Send mode failed"),
+                            QStringLiteral("Sharing service is not available."));
+    return;
+  }
+
+  const uint64_t generation = nextOperationGeneration();
+  stopping_ = false;
+  emitDiagnosticsWarningIfNeeded(QStringLiteral("Send mode"));
+  service_->StopReceiveMode([this, generation](NearbySharingApi::StatusCode status) {
+    if (!isCurrentOperation(generation)) {
+      return;
+    }
     if (status == NearbySharingApi::StatusCode::kOk ||
         status == NearbySharingApi::StatusCode::kStatusAlreadyStopped) {
-      service_->StartSendMode([this](NearbySharingApi::StatusCode status) {
+      service_->StartSendMode([this, generation](NearbySharingApi::StatusCode status) {
         QMetaObject::invokeMethod(
             this,
-            [this, status]() {
+            [this, generation, status]() {
+              if (!isCurrentOperation(generation)) {
+                return;
+              }
               setStatus(QStringLiteral("StartSendMode: %1")
                             .arg(StatusMapper::ApiStatusToString(status)));
               if (status != NearbySharingApi::StatusCode::kOk) {
                 state_.SetRunning(false);
                 emit runningChanged();
+                if (state_.mode() != QStringLiteral("Receive")) {
+                  state_.SetMode(QStringLiteral("Receive"));
+                  emit modeChanged();
+                }
+                emit requestTrayMessage(
+                    QStringLiteral("Send mode failed"),
+                    QStringLiteral("Could not start send mode: %1")
+                        .arg(StatusMapper::ApiStatusToString(status)));
               }
             },
             Qt::QueuedConnection);
       });
+      return;
     }
+
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation, status]() {
+          if (!isCurrentOperation(generation)) {
+            return;
+          }
+          setStatus(QStringLiteral("StopReceiveMode failed: %1")
+                        .arg(StatusMapper::ApiStatusToString(status)));
+          emit requestTrayMessage(
+              QStringLiteral("Send mode failed"),
+              QStringLiteral("Could not stop receive mode: %1")
+                  .arg(StatusMapper::ApiStatusToString(status)));
+          state_.SetRunning(false);
+          emit runningChanged();
+          if (state_.mode() != QStringLiteral("Receive")) {
+            state_.SetMode(QStringLiteral("Receive"));
+            emit modeChanged();
+          }
+        },
+        Qt::QueuedConnection);
   });
 }
 
 void FileShareTrayController::startReceiveMode() {
-  service_->StopSendMode([this](NearbySharingApi::StatusCode status) {
+  if (!service_) {
+    setStatus(QStringLiteral("Sharing service is not available"));
+    emit requestTrayMessage(QStringLiteral("Receive mode failed"),
+                            QStringLiteral("Sharing service is not available."));
+    return;
+  }
+
+  const uint64_t generation = nextOperationGeneration();
+  stopping_ = false;
+  emitDiagnosticsWarningIfNeeded(QStringLiteral("Receive mode"));
+  service_->StopSendMode([this, generation](NearbySharingApi::StatusCode status) {
+    if (!isCurrentOperation(generation)) {
+      return;
+    }
     if (status == NearbySharingApi::StatusCode::kOk ||
         status == NearbySharingApi::StatusCode::kStatusAlreadyStopped) {
-      service_->StartReceiveMode([this](NearbySharingApi::StatusCode status) {
+      service_->StartReceiveMode([this, generation](NearbySharingApi::StatusCode status) {
         QMetaObject::invokeMethod(
             this,
-            [this, status]() {
+            [this, generation, status]() {
+              if (!isCurrentOperation(generation)) {
+                return;
+              }
               setStatus(QStringLiteral("StartReceiveMode: %1")
                             .arg(StatusMapper::ApiStatusToString(status)));
               if (status != NearbySharingApi::StatusCode::kOk) {
                 state_.SetRunning(false);
                 emit runningChanged();
+                emit requestTrayMessage(
+                    QStringLiteral("Receive mode failed"),
+                    QStringLiteral("Could not start receive mode: %1")
+                        .arg(StatusMapper::ApiStatusToString(status)));
               }
             },
             Qt::QueuedConnection);
       });
+      return;
     }
+
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation, status]() {
+          if (!isCurrentOperation(generation)) {
+            return;
+          }
+          setStatus(QStringLiteral("StopSendMode failed: %1")
+                        .arg(StatusMapper::ApiStatusToString(status)));
+          emit requestTrayMessage(
+              QStringLiteral("Receive mode failed"),
+              QStringLiteral("Could not stop send mode: %1")
+                  .arg(StatusMapper::ApiStatusToString(status)));
+          state_.SetRunning(false);
+          emit runningChanged();
+          if (state_.mode() != QStringLiteral("Send")) {
+            state_.SetMode(QStringLiteral("Send"));
+            emit modeChanged();
+          }
+        },
+        Qt::QueuedConnection);
   });
 }
 
@@ -634,10 +1022,14 @@ void FileShareTrayController::switchToSendModeWithFiles(
     const QStringList& file_paths) {
   QStringList normalized_paths;
   QStringList file_names;
-  if (!normalizeFileSelection(file_paths, &normalized_paths, &file_names)) {
+  QString error_message;
+  if (!normalizeFileSelection(file_paths, &normalized_paths, &file_names,
+                              &error_message)) {
     setStatus(QStringLiteral("Selected file is not valid"));
     emit requestTrayMessage(QStringLiteral("Send canceled"),
-                            QStringLiteral("Please choose valid files."));
+                            error_message.isEmpty()
+                                ? QStringLiteral("Please choose valid files.")
+                                : error_message);
     return;
   }
 
@@ -679,14 +1071,23 @@ void FileShareTrayController::sendPendingFilesToTarget(
   if (share_target_id <= 0) {
     return;
   }
+  if (!service_) {
+    setStatus(QStringLiteral("Sharing service is not available"));
+    emit requestTrayMessage(QStringLiteral("Send failed"),
+                            QStringLiteral("Sharing service is not available."));
+    return;
+  }
 
   QStringList normalized_paths;
   QStringList file_names;
+  QString error_message;
   if (!normalizeFileSelection(state_.pendingSendFilePaths(), &normalized_paths,
-                              &file_names)) {
+                              &file_names, &error_message)) {
     setStatus(QStringLiteral("Selected file is not available"));
     emit requestTrayMessage(QStringLiteral("Send failed"),
-                            QStringLiteral("Selected files are not available."));
+                            error_message.isEmpty()
+                                ? QStringLiteral("Selected files are not available.")
+                                : error_message);
     return;
   }
 
@@ -703,12 +1104,16 @@ void FileShareTrayController::sendPendingFilesToTarget(
                              file_count, 0);
   emit transfersChanged();
 
+  const uint64_t generation = operation_generation_;
   service_->SendFiles(
       share_target_id, pendingSendFilePathsForApi(),
-      [this, share_target_id](NearbySharingApi::StatusCode status) {
+      [this, share_target_id, generation](NearbySharingApi::StatusCode status) {
         QMetaObject::invokeMethod(
             this,
-            [this, share_target_id, status]() {
+            [this, share_target_id, generation, status]() {
+              if (!isCurrentOperation(generation)) {
+                return;
+              }
               const QString target_name = state_.GetTargetName(share_target_id);
               if (status == NearbySharingApi::StatusCode::kOk) {
                 setStatus(QStringLiteral("Sending %1 to %2")
@@ -825,6 +1230,8 @@ void FileShareTrayController::notifyStateChange(const QString& property) {
     emit enable5GhzHotspotChanged();
   } else if (property == QStringLiteral("startOnLogin")) {
     emit startOnLoginChanged();
+  } else if (property == QStringLiteral("diagnostics")) {
+    emit diagnosticsChanged();
   } else if (property == QStringLiteral("discoveredTargets")) {
     emit discoveredTargetsChanged();
   } else if (property == QStringLiteral("transfers")) {
@@ -835,14 +1242,98 @@ void FileShareTrayController::notifyStateChange(const QString& property) {
 }
 void FileShareTrayController::acceptTransfer(qlonglong share_target_id) {
   if (service_) {
-    service_->Accept(share_target_id, [](NearbySharingApi::StatusCode) {});
+    const uint64_t generation = operation_generation_;
+    service_->Accept(share_target_id, [this, generation](NearbySharingApi::StatusCode status) {
+      QMetaObject::invokeMethod(
+          this,
+          [this, generation, status]() {
+            if (!isCurrentOperation(generation) ||
+                status == NearbySharingApi::StatusCode::kOk) {
+              return;
+            }
+            setStatus(QStringLiteral("Accept failed: %1")
+                          .arg(StatusMapper::ApiStatusToString(status)));
+            emit requestTrayMessage(
+                QStringLiteral("Accept failed"),
+                QStringLiteral("Could not accept transfer: %1")
+                    .arg(StatusMapper::ApiStatusToString(status)));
+          },
+          Qt::QueuedConnection);
+    });
   }
 }
 
 void FileShareTrayController::rejectTransfer(qlonglong share_target_id) {
   if (service_) {
-    service_->Reject(share_target_id, [](NearbySharingApi::StatusCode) {});
+    const uint64_t generation = operation_generation_;
+    service_->Reject(share_target_id, [this, generation](NearbySharingApi::StatusCode status) {
+      QMetaObject::invokeMethod(
+          this,
+          [this, generation, status]() {
+            if (!isCurrentOperation(generation) ||
+                status == NearbySharingApi::StatusCode::kOk) {
+              return;
+            }
+            setStatus(QStringLiteral("Reject failed: %1")
+                          .arg(StatusMapper::ApiStatusToString(status)));
+            emit requestTrayMessage(
+                QStringLiteral("Reject failed"),
+                QStringLiteral("Could not reject transfer: %1")
+                    .arg(StatusMapper::ApiStatusToString(status)));
+          },
+          Qt::QueuedConnection);
+    });
   }
+}
+
+void FileShareTrayController::cancelTransfer(qlonglong share_target_id) {
+  if (!service_ || share_target_id <= 0) {
+    return;
+  }
+
+  const QString target_name = state_.GetTargetName(share_target_id);
+  state_.AddOrUpdateTransfer(share_target_id, target_name,
+                             QStringLiteral("Cancelling"), 0.0, 0, 0, 0,
+                             QStringLiteral("Unknown"),
+                             QStringLiteral("outgoing"),
+                             state_.pendingSendSummary(),
+                             state_.pendingSendFilePath(),
+                             state_.pendingSendFileCount(), 0);
+  emit transfersChanged();
+
+  const uint64_t generation = operation_generation_;
+  service_->Cancel(share_target_id, [this, share_target_id, generation](
+                                        NearbySharingApi::StatusCode status) {
+    QMetaObject::invokeMethod(
+        this,
+        [this, share_target_id, generation, status]() {
+          if (!isCurrentOperation(generation)) {
+            return;
+          }
+          const QString target_name = state_.GetTargetName(share_target_id);
+          if (status == NearbySharingApi::StatusCode::kOk) {
+            state_.AddOrUpdateTransfer(
+                share_target_id, target_name, QStringLiteral("Cancelled"), 1.0,
+                0, 0, 0, QStringLiteral("Unknown"), QStringLiteral("outgoing"),
+                state_.pendingSendSummary(), state_.pendingSendFilePath(),
+                state_.pendingSendFileCount(), 0);
+            emit transfersChanged();
+            if (state_.pendingSendTargetId() == share_target_id) {
+              clearPendingSendState();
+            }
+            setStatus(QStringLiteral("Transfer cancelled"));
+            return;
+          }
+
+          setStatus(QStringLiteral("Cancel failed: %1")
+                        .arg(StatusMapper::ApiStatusToString(status)));
+          emit requestTrayMessage(
+              QStringLiteral("Cancel failed"),
+              QStringLiteral("Could not cancel transfer: %1")
+                  .arg(StatusMapper::ApiStatusToString(status)));
+        },
+        Qt::QueuedConnection);
+  });
 }
 
 void FileShareTrayController::openFilePicker() {

@@ -54,6 +54,7 @@ Item {
     function isIncomingTransferActive(status) {
         return status === "InProgress"
                 || status === "Queued"
+                || status === "Cancelling"
                 || status === "Connecting"
                 || status === "AwaitingLocalConfirmation"
                 || status === "AwaitingRemoteAcceptance"
@@ -116,6 +117,8 @@ Item {
             return "Preparing transfer"
         if (status === "Connecting")
             return "Connecting"
+        if (status === "Cancelling")
+            return "Cancelling"
         return "Receiving"
     }
 
@@ -419,9 +422,11 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: compact ? 8 : 12
                 visible: incomingTransferStatus === "AwaitingLocalConfirmation"
+                         || (isReceivingActive && incomingTransferStatus !== "Cancelling")
 
                 Button {
                     text: "Reject"
+                    visible: incomingTransferStatus === "AwaitingLocalConfirmation"
                     flat: true
                     contentItem: Text {
                         text: parent.text
@@ -443,6 +448,7 @@ Item {
 
                 Button {
                     text: "Accept"
+                    visible: incomingTransferStatus === "AwaitingLocalConfirmation"
                     flat: true
                     contentItem: Text {
                         text: parent.text
@@ -459,6 +465,28 @@ Item {
                         radius: 16
                     }
                     onClicked: fileShareController.acceptTransfer(incomingTransfer.targetId)
+                }
+
+                Button {
+                    text: "Cancel"
+                    visible: incomingTransferStatus !== "AwaitingLocalConfirmation"
+                    flat: true
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#fecaca"
+                        font.pixelSize: compact ? 12 : 13
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitWidth: 76
+                        implicitHeight: 32
+                        color: parent.pressed ? "#7f1d1d" : "#450a0a"
+                        border.color: "#991b1b"
+                        radius: 16
+                    }
+                    onClicked: fileShareController.cancelTransfer(incomingTransfer.targetId)
                 }
             }
         }

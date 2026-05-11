@@ -12,6 +12,7 @@ QString ApiStatusToString(NearbySharingApi::StatusCode status) {
 
 bool IsActiveTransferStatus(const QString& status) {
   return status == QStringLiteral("Queued") ||
+         status == QStringLiteral("Cancelling") ||
          status == QStringLiteral("Connecting") ||
          status == QStringLiteral("AwaitingLocalConfirmation") ||
          status == QStringLiteral("AwaitingRemoteAcceptance") ||

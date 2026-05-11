@@ -56,7 +56,9 @@ void FileShareState::RemoveTarget(qlonglong id) {
   }
 
   RemovePendingTargetRemoval(id);
-  target_names_.remove(id);
+  if (!transfer_row_by_target_.contains(id)) {
+    target_names_.remove(id);
+  }
 
   if (!discovered_row_by_target_.contains(id)) {
     return;

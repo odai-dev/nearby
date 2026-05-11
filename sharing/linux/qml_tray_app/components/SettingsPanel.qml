@@ -183,6 +183,31 @@ Drawer {
                     }
                 }
 
+                SectionLabel {
+                    text: "DIAGNOSTICS"
+                    visible: fileShareController.diagnosticsSummary.length > 0
+                }
+                SectionCard {
+                    width: settingsCol.width
+                    visible: fileShareController.diagnosticsSummary.length > 0
+
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 12
+                        spacing: 12
+
+                        Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: 12
+                            color: "#facc15"
+                            text: fileShareController.diagnosticsSummary
+                        }
+                    }
+                }
+
                 SectionLabel { text: "LOGGING" }
                 SectionCard {
                     width: settingsCol.width

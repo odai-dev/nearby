@@ -99,7 +99,7 @@ class FileShareState {
   QString device_name_ = QStringLiteral("NearbyLinux");
   QString status_message_ = QStringLiteral("Idle");
   bool running_ = false;
-  bool auto_accept_incoming_ = true;
+  bool auto_accept_incoming_ = false;
   bool enable_5ghz_hotspot_ = true;
   bool start_on_login_ = false;
 

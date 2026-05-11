@@ -2,6 +2,8 @@
 #define SHARING_LINUX_QML_TRAY_APP_FILE_SHARE_TRAY_CONTROLLER_H_
 
 #include <QObject>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -9,6 +11,38 @@
 #include <sharing/linux/nearby_sharing_api.h>
 
 using NearbySharingApi = nearby::sharing::NearbySharingApi;
+
+class NearbySharingServiceInterface {
+ public:
+  virtual ~NearbySharingServiceInterface() = default;
+
+  virtual void SetListener(NearbySharingApi::Listener listener) = 0;
+  virtual void StartSendMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void StopSendMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void StartReceiveMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void StopReceiveMode(
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void SendFiles(
+      qlonglong share_target_id, const std::vector<std::string>& file_paths,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void Accept(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void Reject(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void Cancel(
+      qlonglong share_target_id,
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual void Set5GhzHotspotEnabled(bool enabled) = 0;
+  virtual void Shutdown(
+      std::function<void(NearbySharingApi::StatusCode)> callback) = 0;
+  virtual std::string GetQrCodeUrl() const = 0;
+  virtual NearbySharingApi::DiagnosticInfo GetDiagnostics() const = 0;
+};
 
 class FileShareTrayController : public QObject {
   Q_OBJECT
@@ -27,13 +61,20 @@ class FileShareTrayController : public QObject {
   Q_PROPERTY(bool autoAcceptIncoming READ autoAcceptIncoming WRITE setAutoAcceptIncoming NOTIFY autoAcceptIncomingChanged)
   Q_PROPERTY(bool enable5GhzHotspot READ enable5GhzHotspot WRITE setEnable5GhzHotspot NOTIFY enable5GhzHotspotChanged)
   Q_PROPERTY(bool startOnLogin READ startOnLogin WRITE setStartOnLogin NOTIFY startOnLoginChanged)
+  Q_PROPERTY(QString diagnosticsSummary READ diagnosticsSummary NOTIFY diagnosticsChanged)
   Q_PROPERTY(QString qrCodeUrl READ qrCodeUrl NOTIFY qrCodeUrlChanged)
   Q_PROPERTY(QStringList qrCodeRows READ qrCodeRows NOTIFY qrCodeChanged)
   Q_PROPERTY(int qrCodeSize READ qrCodeSize NOTIFY qrCodeChanged)
   Q_PROPERTY(QString logPath READ logPath WRITE setLogPath NOTIFY logPathChanged)
 
  public:
+  using ServiceFactory =
+      std::function<std::unique_ptr<NearbySharingServiceInterface>(
+          const QString& device_name)>;
+
   explicit FileShareTrayController(QObject* parent = nullptr);
+  FileShareTrayController(ServiceFactory service_factory,
+                          QObject* parent = nullptr);
   ~FileShareTrayController() override;
 
   // Property accessors
@@ -52,6 +93,7 @@ class FileShareTrayController : public QObject {
   bool autoAcceptIncoming() const { return state_.autoAcceptIncoming(); }
   bool enable5GhzHotspot() const { return state_.enable5GhzHotspot(); }
   bool startOnLogin() const { return state_.startOnLogin(); }
+  QString diagnosticsSummary() const { return diagnostics_summary_; }
   QString qrCodeUrl() const { return state_.qrCodeUrl(); }
   QStringList qrCodeRows() const { return state_.qrCodeRows(); }
   int qrCodeSize() const { return state_.qrCodeSize(); }
@@ -78,6 +120,7 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void hideToTray();
   Q_INVOKABLE void acceptTransfer(qlonglong share_target_id);
   Q_INVOKABLE void rejectTransfer(qlonglong share_target_id);
+  Q_INVOKABLE void cancelTransfer(qlonglong share_target_id);
   Q_INVOKABLE void openFilePicker();
 
  signals:
@@ -93,6 +136,7 @@ class FileShareTrayController : public QObject {
   void autoAcceptIncomingChanged();
   void enable5GhzHotspotChanged();
   void startOnLoginChanged();
+  void diagnosticsChanged();
   void qrCodeUrlChanged();
   void qrCodeChanged();
   void logPathChanged();
@@ -108,9 +152,17 @@ class FileShareTrayController : public QObject {
   void loadSettings();
   void saveSettings() const;
   bool applyAutostartSetting(bool enabled, QString* error_message) const;
+  uint64_t nextOperationGeneration();
+  bool isCurrentOperation(uint64_t generation) const;
+  bool isCurrentService(uint64_t generation) const;
+  void refreshDiagnostics();
+  void emitDiagnosticsWarningIfNeeded(const QString& operation_name);
+  QString diagnosticWarningsToSummary(
+      const NearbySharingApi::DiagnosticInfo& diagnostics) const;
   void updateQrCodeData();
   bool normalizeFileSelection(const QStringList& file_paths, QStringList* normalized_paths,
-                              QStringList* file_names) const;
+                              QStringList* file_names,
+                              QString* error_message) const;
   QStringList localPathsFromUrlValues(const QVariantList& urls) const;
   std::vector<std::string> pendingSendFilePathsForApi() const;
   void clearPendingSendState();
@@ -119,6 +171,7 @@ class FileShareTrayController : public QObject {
 
   void startSendMode();
   void startReceiveMode();
+  void finishStopOperation(uint64_t generation);
   
   void updateTargetFromInfo(const NearbySharingApi::ShareTargetInfo& info);
   void handleTransferUpdate(const NearbySharingApi::TransferUpdateInfo& update);
@@ -131,8 +184,13 @@ class FileShareTrayController : public QObject {
   void setStatus(const QString& status);
   void notifyStateChange(const QString& property);
 
-  std::unique_ptr<NearbySharingApi> service_;
+  ServiceFactory service_factory_;
+  std::unique_ptr<NearbySharingServiceInterface> service_;
   FileShareState state_;
+  QString diagnostics_summary_;
+  uint64_t service_generation_ = 0;
+  uint64_t operation_generation_ = 0;
+  bool stopping_ = false;
 };
 
 #endif  // SHARING_LINUX_QML_TRAY_APP_FILE_SHARE_TRAY_CONTROLLER_H_
