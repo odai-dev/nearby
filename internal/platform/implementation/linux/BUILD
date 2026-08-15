@@ -74,7 +74,7 @@ cc_library(
         ":comm",
         "//internal/platform/implementation:types",
         "@com_google_absl//absl/strings",
-        "@libsystemd",
+        "@sdbus_cpp//:libsystemd",
         "@sdbus_cpp",
     ],
 )
@@ -150,7 +150,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
-        "@libsystemd",
+        "@sdbus_cpp//:libsystemd",
         "@sdbus_cpp",
     ],
 )
@@ -278,7 +278,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
-        "@libsystemd",
+        "@sdbus_cpp//:libsystemd",
         "@nlohmann_json//:json",
         "@sdbus_cpp",
     ],

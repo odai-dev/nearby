@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include "file_share_tray_controller.h"
+#include "native_file_dialog.h"
 #include "notification_manager.h"
 
 namespace {
@@ -177,9 +178,9 @@ std::unique_ptr<QLocalServer> CreateSingleInstanceServer() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  // Use portal for file picker but don't force the whole platform theme
-  // to avoid breaking the system dark mode detection.
-  qputenv("QT_USE_PORTAL", "1");
+  if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")) {
+    qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+  }
 
   RedirectProcessLogsToConfiguredPath();
 
@@ -247,7 +248,7 @@ int main(int argc, char* argv[]) {
                        showAndActivateWindow();
                      });
   }
-
+  const auto resolve_tray_icon = [&app]() {
     QIcon tray_icon(QStringLiteral(":/icons/nearby-linux-desktop.png"));
     if (tray_icon.isNull()) {
       tray_icon = app.windowIcon();
@@ -331,28 +332,30 @@ int main(int argc, char* argv[]) {
 
   QObject::connect(&controller, &FileShareTrayController::requestFilePicker,
                    [&controller, window]() {
-                     // Using URLs can sometimes trigger the portal more reliably in Qt 6
-                     const QList<QUrl> urls = QFileDialog::getOpenFileUrls(
-                         nullptr, QStringLiteral("Select files to send"),
-                         QUrl::fromLocalFile(QDir::homePath()), QStringLiteral("All Files (*)"));
-                     const QStringList files = LocalFilesFromUrls(urls);
-                     if (!files.isEmpty()) {
-                       controller.switchToSendModeWithFiles(files);
-                     }
+                     NativeFileDialog::pickFiles(
+                         window, QStringLiteral("Select files to send"),
+                         QDir::homePath(), /*multiple=*/true,
+                         [&controller](const QStringList& files) {
+                           if (!files.isEmpty()) {
+                             controller.switchToSendModeWithFiles(files);
+                           }
+                         });
                    });
   QObject::connect(&controller,
                    &FileShareTrayController::requestReceiveFolderPicker,
-                   [&controller](const QString& current_folder) {
+                   [&controller, window](const QString& current_folder) {
                      const QString initial_folder =
                          current_folder.trimmed().isEmpty()
                              ? QDir::homePath()
                              : current_folder;
-                     const QString folder = QFileDialog::getExistingDirectory(
-                         nullptr, QStringLiteral("Select receive folder"),
-                         initial_folder);
-                     if (!folder.isEmpty()) {
-                       controller.setReceiveFolder(folder);
-                     }
+                     NativeFileDialog::pickFolder(
+                         window, QStringLiteral("Select receive folder"),
+                         initial_folder,
+                         [&controller](const QString& folder) {
+                           if (!folder.isEmpty()) {
+                             controller.setReceiveFolder(folder);
+                           }
+                         });
                    });
 
   QObject::connect(&controller, &FileShareTrayController::requestTrayMessage,

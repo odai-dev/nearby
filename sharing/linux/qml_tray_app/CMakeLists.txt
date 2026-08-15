@@ -54,6 +54,8 @@ qt_add_executable(nearby_qml_file_tray_app
   qr_code_generator.h
   notification_manager.cpp
   notification_manager.h
+  native_file_dialog.cc
+  native_file_dialog.h
   third_party/libqrencode/qrencode_compat.h
   resources_file_share.qrc
 )

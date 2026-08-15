@@ -1,4 +1,4 @@
-startup --host_jvm_args=-Djava.net.preferIPv4Stack=true
+startup --host_jvm_args=-Djava.net.preferIPv4Stack=true --host_jvm_args=-Djava.net.preferIPv4Addresses=true
 build --cxxopt=-std=c++20
 # Definition of --config=memcheck
 build:memcheck --strip=never --test_timeout=3600
