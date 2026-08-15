@@ -6,7 +6,6 @@
 #include <QString>
 #include <QStringList>
 #include <QWindow>
-#include <QVariantMap>
 
 class NativeFileDialog : public QObject {
   Q_OBJECT
@@ -27,25 +26,30 @@ class NativeFileDialog : public QObject {
                          std::function<void(const QString&)> on_selected);
 
  private:
-  void startOpenFilePortal(QWindow* parent_window,
-                           const QString& title,
-                           const QString& initial_folder,
-                           bool directory,
-                           bool multiple,
-                           std::function<void(const QStringList&)> on_selected);
+  void startFilePicker(QWindow* parent_window,
+                       const QString& title,
+                       const QString& initial_folder,
+                       bool directory,
+                       bool multiple,
+                       std::function<void(const QStringList&)> on_selected);
 
-  void fallbackToProcessOrQt(QWindow* parent_window,
-                             const QString& title,
-                             const QString& initial_folder,
-                             bool directory,
-                             bool multiple,
-                             std::function<void(const QStringList&)> on_selected);
+  bool tryLaunchZenity(const QString& title,
+                       const QString& initial_folder,
+                       bool directory,
+                       bool multiple);
 
- private Q_SLOTS:
-  void onPortalResponse(uint response, const QVariantMap& results);
+  bool tryLaunchKDialog(const QString& title,
+                        const QString& initial_folder,
+                        bool directory,
+                        bool multiple);
+
+  void fallbackToQtDialog(QWindow* parent_window,
+                          const QString& title,
+                          const QString& initial_folder,
+                          bool directory,
+                          bool multiple);
 
  private:
-  QString request_path_;
   std::function<void(const QStringList&)> callback_;
 };
 
