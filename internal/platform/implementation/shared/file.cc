@@ -67,19 +67,21 @@ ExceptionOr<ByteArray> IOFile::Read(std::int64_t size) {
     return ExceptionOr<ByteArray>{Exception::kIo};
   }
 
-  ByteArray bytes(size);
-  std::unique_ptr<char[]> read_bytes{new char[size]};
-  file_.read(read_bytes.get(), static_cast<ptrdiff_t>(size));
+  std::string buffer;
+  buffer.resize(size);
+  file_.read(buffer.data(), static_cast<ptrdiff_t>(size));
   auto num_bytes_read = file_.gcount();
   if (num_bytes_read == 0) {
     return ExceptionOr<ByteArray>{Exception::kIo};
   }
 
-  return ExceptionOr<ByteArray>(ByteArray(read_bytes.get(), num_bytes_read));
+  buffer.resize(static_cast<size_t>(num_bytes_read));
+  return ExceptionOr<ByteArray>(ByteArray(std::move(buffer)));
 }
 
 Exception IOFile::Close() {
   if (file_.is_open()) {
+    file_.flush();
     file_.close();
   }
   return {Exception::kSuccess};
@@ -95,7 +97,6 @@ Exception IOFile::Write(absl::string_view data) {
   }
 
   file_.write(data.data(), data.size());
-  file_.flush();
   return {file_.good() ? Exception::kSuccess : Exception::kIo};
 }
 

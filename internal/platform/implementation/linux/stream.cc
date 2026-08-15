@@ -39,10 +39,26 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
 
   std::string buffer;
   buffer.resize(size);
+  const int fd = fd_->get();
+
+  // Try opportunistic read first if kernel socket buffer already has data
+  ssize_t direct_read = recv(fd, buffer.data(), buffer.size(), MSG_DONTWAIT);
+  if (direct_read > 0) {
+    buffer.resize(static_cast<std::size_t>(direct_read));
+    return ExceptionOr<ByteArray>(ByteArray(std::move(buffer)));
+  }
+  if (direct_read == 0) {
+    // EOF / peer closed.
+    return ExceptionOr<ByteArray>(ByteArray(std::string()));
+  }
+  if (direct_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+    LOG(ERROR) << __func__ << ": direct recv failed: " << std::strerror(errno);
+    return {Exception::kIo};
+  }
 
   while (true) {
     pollfd pfd{};
-    pfd.fd = fd_->get();
+    pfd.fd = fd;
     pfd.events = POLLIN;
 
     int poll_result = poll(&pfd, 1, 1000);
@@ -73,7 +89,7 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
 
     if (pfd.revents & (POLLIN | POLLHUP)) {
       ssize_t bytes_read =
-          recv(fd_->get(), buffer.data(), buffer.size(), 0);
+          recv(fd, buffer.data(), buffer.size(), 0);
 
       if (bytes_read > 0) {
         buffer.resize(static_cast<std::size_t>(bytes_read));
@@ -116,6 +132,18 @@ Exception OutputStream::Write(absl::string_view data) {
   const int fd = fd_->get();
   size_t sent = 0;
 
+  // Try opportunistic write first
+  ssize_t direct_sent = send(fd, data.data(), data.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+  if (direct_sent > 0) {
+    sent += static_cast<size_t>(direct_sent);
+    if (sent >= data.size()) {
+      return {Exception::kSuccess};
+    }
+  } else if (direct_sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+    LOG(ERROR) << __func__ << ": direct send failed: " << std::strerror(errno);
+    return {Exception::kIo};
+  }
+
   while (sent < data.size()) {
     pollfd pfd{};
     pfd.fd = fd;
@@ -150,29 +178,19 @@ Exception OutputStream::Write(absl::string_view data) {
       continue;
     }
 
-    ssize_t n = send(
-        fd,
-        data.data() + sent,
-        data.size() - sent,
-        MSG_NOSIGNAL);
-
-    if (n > 0) {
-      sent += static_cast<size_t>(n);
+    ssize_t ret =
+        send(fd, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
+    if (ret > 0) {
+      sent += static_cast<size_t>(ret);
       continue;
     }
 
-    if (n == 0) {
+    if (ret == 0) {
       LOG(ERROR) << __func__ << ": send returned 0";
       return {Exception::kIo};
     }
 
-    if (errno == EINTR) {
-      continue;
-    }
-
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      // Socket became not writable after poll said it was writable.
-      // Normal for non-blocking FDs. Go back to poll().
+    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
       continue;
     }
 
