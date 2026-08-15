@@ -45,7 +45,16 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
     pfd.fd = fd_->get();
     pfd.events = POLLIN;
 
-    int poll_result = poll(&pfd, 1, -1);
+    int poll_result = poll(&pfd, 1, 1000);
+
+    if (!fd_ || !fd_->isValid()) {
+      return {Exception::kIo};
+    }
+
+    if (poll_result == 0) {
+      // Timeout tick, re-check valid fd and continue
+      continue;
+    }
 
     if (poll_result < 0) {
       if (errno == EINTR) {
@@ -57,7 +66,7 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
     }
 
     if (pfd.revents & POLLNVAL || pfd.revents & POLLERR) {
-      LOG(ERROR) << __func__ << ": Error reading from BluetoothSocket: "
+      LOG(ERROR) << __func__ << ": Error reading from socket: "
                  << std::strerror(errno);
       return {Exception::kIo};
     }
@@ -93,7 +102,8 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
 }
 
 Exception InputStream::Close() {
-  if (!fd_->isValid()) return Exception{Exception::kIo};
+  if (!fd_ || !fd_->isValid()) return Exception{Exception::kIo};
+  ::shutdown(fd_->get(), SHUT_RDWR);
   fd_.reset();
   return {};
 }
@@ -113,8 +123,16 @@ Exception OutputStream::Write(absl::string_view data) {
 
     int poll_result;
     do {
-      poll_result = poll(&pfd, 1, -1);
+      poll_result = poll(&pfd, 1, 1000);
     } while (poll_result < 0 && errno == EINTR);
+
+    if (!fd_ || !fd_->isValid()) {
+      return {Exception::kIo};
+    }
+
+    if (poll_result == 0) {
+      continue;
+    }
 
     if (poll_result < 0) {
       LOG(ERROR) << __func__
@@ -169,8 +187,9 @@ Exception OutputStream::Write(absl::string_view data) {
 Exception OutputStream::Flush() { return Exception{Exception::kSuccess}; }
 
 Exception OutputStream::Close() {
-  if (!fd_->isValid()) return Exception{Exception::kIo};
+  if (!fd_ || !fd_->isValid()) return Exception{Exception::kIo};
 
+  ::shutdown(fd_->get(), SHUT_RDWR);
   auto ret = close(fd_->get()) < 0 ? Exception{Exception::kIo}
                                   : Exception{Exception::kSuccess};
   fd_.reset();

@@ -39,35 +39,68 @@ BleL2capInputStream::~BleL2capInputStream() {
 }
 
 ExceptionOr<ByteArray> BleL2capInputStream::Read(std::int64_t size) {
-  std::vector<char> buffer(size);
+  if (size <= 0) {
+    return ExceptionOr<ByteArray>(ByteArray(std::string()));
+  }
+  if (!fd_raw_ || !fd_raw_->isValid()) {
+    return {Exception::kIo};
+  }
 
-  pollfd pfds[1];
-  pfds[0].fd = fd_raw_->get();
-  pfds[0].events = POLLIN;
+  std::vector<char> buffer(size);
   ssize_t rcvd = 0;
 
   while (rcvd < size) {
-    int r = poll(pfds, 1, -1);
+    pollfd pfd{};
+    pfd.fd = fd_raw_->get();
+    pfd.events = POLLIN;
+
+    int r = poll(&pfd, 1, 1000);
+    if (!fd_raw_ || !fd_raw_->isValid()) {
+      return {Exception::kIo};
+    }
+
     if (r < 0) {
       if (errno == EINTR) {
         continue;
       }
-      return Exception{Exception::kIo};
+      return {Exception::kIo};
     }
-    if (pfds[0].revents & POLLIN) {
-      auto r = recv(fd_raw_->get(), buffer.data() + rcvd, size - rcvd, 0);
-      if (r < 0) {
-        return Exception{Exception::kIo};
+
+    if (r == 0) {
+      // Timeout tick, continue
+      continue;
+    }
+
+    if (pfd.revents & (POLLERR | POLLNVAL)) {
+      return {Exception::kIo};
+    }
+
+    if (pfd.revents & (POLLIN | POLLHUP)) {
+      auto bytes_read = recv(fd_raw_->get(), buffer.data() + rcvd, size - rcvd, 0);
+      if (bytes_read > 0) {
+        rcvd += bytes_read;
+      } else if (bytes_read == 0) {
+        // EOF / disconnected
+        if (rcvd == 0) {
+          return ExceptionOr<ByteArray>(ByteArray(std::string()));
+        }
+        break;
+      } else {
+        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+          continue;
+        }
+        return {Exception::kIo};
       }
-      rcvd += r;
     }
   }
 
-  return ExceptionOr{ByteArray(std::string(buffer.begin(), buffer.end()))};
+  buffer.resize(rcvd);
+  return ExceptionOr<ByteArray>{ByteArray(std::string(buffer.begin(), buffer.end()))};
 }
 
 Exception BleL2capInputStream::Close() {
-  if (!fd_raw_->isValid()) return {Exception::kSuccess};
+  if (!fd_raw_ || !fd_raw_->isValid()) return {Exception::kSuccess};
+  ::shutdown(fd_raw_->get(), SHUT_RDWR);
   fd_raw_->reset();
   return {Exception::kSuccess};
 }
@@ -76,32 +109,54 @@ BleL2capOutputStream::~BleL2capOutputStream() {
 }
 
 Exception BleL2capOutputStream::Write(absl::string_view data) {
-  pollfd pfds[1];
-  pfds[0].fd = fd_raw_->get();
-  pfds[0].events = POLLOUT;
+  if (!fd_raw_ || !fd_raw_->isValid()) {
+    return {Exception::kIo};
+  }
+
   ssize_t sent = 0;
 
   while (sent < data.size()) {
-    int r = poll(pfds, 1, -1);
+    pollfd pfd{};
+    pfd.fd = fd_raw_->get();
+    pfd.events = POLLOUT;
+
+    int r = poll(&pfd, 1, 1000);
+    if (!fd_raw_ || !fd_raw_->isValid()) {
+      return {Exception::kIo};
+    }
+
     if (r < 0) {
       if (errno == EINTR) {
         continue;
       }
-      return Exception{Exception::kIo};
+      return {Exception::kIo};
     }
-    if (pfds[0].revents & POLLOUT) {
-      auto r = send(fd_raw_->get(), data.data() + sent, data.size(), 0);
-      if (r < 0) {
-        return Exception{Exception::kIo};
+
+    if (r == 0) {
+      continue;
+    }
+
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+      return {Exception::kIo};
+    }
+
+    if (pfd.revents & POLLOUT) {
+      auto written = send(fd_raw_->get(), data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
+      if (written < 0) {
+        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+          continue;
+        }
+        return {Exception::kIo};
       }
-      sent += r;
+      sent += written;
     }
   }
   return {Exception::kSuccess};
 }
 
 Exception BleL2capOutputStream::Close() {
-  if (!fd_raw_->isValid()) return {Exception::kSuccess};
+  if (!fd_raw_ || !fd_raw_->isValid()) return {Exception::kSuccess};
+  ::shutdown(fd_raw_->get(), SHUT_RDWR);
   fd_raw_->reset();
   return {Exception::kSuccess};
 }
@@ -119,8 +174,10 @@ BleL2capSocket::~BleL2capSocket() {
 }
 
 Exception BleL2capSocket::Close() {
-  if (!fd_->isValid()) return {Exception::kIo};
+  if (!fd_ || !fd_->isValid()) return {Exception::kIo};
+  ::shutdown(fd_->get(), SHUT_RDWR);
   fd_->reset();
+  closed_ = true;
   return {Exception::kSuccess};
 }
 
