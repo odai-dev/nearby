@@ -97,10 +97,10 @@ constexpr auto kEnableWifiHotspotClient =
     flags::Flag<bool>(kConfigPackage, "45648734", true);
 // Default max transmit packet size for medium.
 constexpr auto kMediumDefaultMaxTransmitPacketSize =
-    flags::Flag<int64_t>(kConfigPackage, "45669529", 65536);
+    flags::Flag<int64_t>(kConfigPackage, "45669529", 524288);
 // Default max allowed read bytes for medium.
 constexpr auto kMediumMaxAllowedReadBytes =
-    flags::Flag<int64_t>(kConfigPackage, "45669530", 1048576);
+    flags::Flag<int64_t>(kConfigPackage, "45669530", 8388608);
 // Disable/Enable refactor of BLE/L2CAP in Nearby Connections SDK.
 constexpr auto kRefactorBleL2cap =
     flags::Flag<bool>(kConfigPackage, "45737079", false);

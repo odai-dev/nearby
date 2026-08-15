@@ -17,6 +17,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -34,6 +35,26 @@
 
 namespace nearby {
 namespace linux {
+
+inline void ConfigureHighSpeedTcpSocket(int sock) {
+  if (sock < 0) return;
+
+  int nodelay = 1;
+  setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+
+#ifdef TCP_QUICKACK
+  int quickack = 1;
+  setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &quickack, sizeof(quickack));
+#endif
+
+  int buf_size = 4 * 1024 * 1024;  // 4MB buffer
+  setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size));
+  setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size));
+
+  int keepalive = 1;
+  setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+}
+
 class TCPSocket {
  public:
   explicit TCPSocket(const sdbus::UnixFd& fd)
@@ -47,6 +68,8 @@ class TCPSocket {
                          << ": Error opening socket: " << std::strerror(errno);
       return std::nullopt;
     }
+
+    ConfigureHighSpeedTcpSocket(sock);
 
     LOG(INFO) << __func__ << ": Connecting to " << ip_address << ":"
                          << port;
@@ -160,6 +183,8 @@ class TCPServerSocket {
                          << server_fd << ": " << std::strerror(errno);
       return std::nullopt;
     }
+
+    ConfigureHighSpeedTcpSocket(conn);
 
     return TCPSocket(sdbus::UnixFd(conn));
   };

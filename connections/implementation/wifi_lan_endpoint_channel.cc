@@ -34,6 +34,10 @@ location::nearby::proto::connections::Medium WifiLanEndpointChannel::GetMedium()
   return location::nearby::proto::connections::Medium::WIFI_LAN;
 }
 
+int WifiLanEndpointChannel::GetMaxTransmitPacketSize() const {
+  return 524288;  // 512 KB high-speed Wi-Fi packet size
+}
+
 void WifiLanEndpointChannel::CloseImpl() {
   auto status = socket_.Close();
   if (!status.Ok()) {
