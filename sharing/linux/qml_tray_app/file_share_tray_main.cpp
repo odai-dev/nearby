@@ -248,7 +248,6 @@ int main(int argc, char* argv[]) {
                      });
   }
 
-  const auto resolve_tray_icon = [&app]() {
     QIcon tray_icon(QStringLiteral(":/icons/nearby-linux-desktop.png"));
     if (tray_icon.isNull()) {
       tray_icon = app.windowIcon();

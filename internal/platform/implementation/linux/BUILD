@@ -12,25 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
-
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-#refresh_compile_commands(
-#    name = "refresh_compile_commands",
-#
-#    # Specify the targets of interest.
-#    # For example, specify a dict of targets and any flags required to build.
-#    targets = {
-#        ":linux": "-s --check_visibility=false --spawn_strategy=standalone --verbose_failures --strip=never --copt=-O0 --copt=-g --copt=-fno-omit-frame-pointer",
-#        "//connections:core": "-s --check_visibility=false --spawn_strategy=standalone --verbose_failures --strip=never --copt=-O0 --copt=-g --copt=-fno-omit-frame-pointer",
-#        "//connections/file_share:file_share": "-s --check_visibility=false --spawn_strategy=standalone --verbose_failures --strip=never --copt=-O0 --copt=-g --copt=-fno-omit-frame-pointer",
-#    },
-#    # No need to add flags already in .bazelrc. They're automatically picked up.
-#    # If you don't need flags, a list of targets is also okay, as is a single target string.
-#    # Wildcard patterns, like //... for everything, *are* allowed here, just like a build.
-#    # As are additional targets (+) and subtractions (-), like in bazel query https://docs.bazel.build/versions/main/query.html#expressions
-#    # And if you're working on a header-only library, specify a test or binary target that compiles it.
-#)
+
+refresh_compile_commands(
+    name = "refresh_compile_commands_linux",
+
+    # Specify the targets of interest.
+    # For example, specify a dict of targets and any flags required to build.
+    targets = {
+        ":linux": "-s --check_visibility=false --spawn_strategy=standalone --verbose_failures --cxxopt=-std=c++20 --host_cxxopt=-std=c++20  --cxxopt='-fvisibility-inlines-hidden'",
+    },
+    # No need to add flags already in .bazelrc. They're automatically picked up.
+    # If you don't need flags, a list of targets is also okay, as is a single target string.
+    # Wildcard patterns, like //... for everything, *are* allowed here, just like a build.
+    # As are additional targets (+) and subtractions (-), like in bazel query https://docs.bazel.build/versions/main/query.html#expressions
+    # And if you're working on a header-only library, specify a test or binary target that compiles it.
+)
+
 
 licenses(["notice"])
 
@@ -41,8 +40,12 @@ cc_library(
         #"log_message.cc",
         "timer.cc",
         "linux_flags.cc",
+        "file_path.cc",
+        "http_loader.cc",
     ],
     hdrs = [
+        "file_path.h",
+        "http_loader.h",
         "atomic_boolean.h",
         "atomic_reference.h",
         "atomic_uint32.h",
@@ -71,8 +74,8 @@ cc_library(
         ":comm",
         "//internal/platform/implementation:types",
         "@com_google_absl//absl/strings",
+        "@libsystemd",
         "@sdbus_cpp",
-        "@sdbus_cpp//:libsystemd",
     ],
 )
 
@@ -147,8 +150,8 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
+        "@libsystemd",
         "@sdbus_cpp",
-        "@sdbus_cpp//:libsystemd",
     ],
 )
 
@@ -166,6 +169,7 @@ cc_library(
         "//internal/platform/implementation:types",
         "@com_google_absl//absl/strings",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -198,7 +202,6 @@ cc_library(
         "ble_l2cap_socket.cc",
         "bluetooth_adapter.cc",
         "bluetooth_bluez_profile.cc",
-        "bluetooth_classic_socket.cc",
         "bluetooth_classic_device.cc",
         "bluetooth_classic_medium.cc",
         "bluetooth_classic_server_socket.cc",
@@ -275,9 +278,9 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
+        "@libsystemd",
         "@nlohmann_json//:json",
         "@sdbus_cpp",
-        "@sdbus_cpp//:libsystemd",
     ],
 )
 
@@ -309,32 +312,31 @@ cc_test(
         "mutex_test.cc",
         "tcp_server_socket_test.cc",
         "utils_test.cc",
+        "ble_l2cap_socket_test.cc",
+        "bluetooth_classic_socket_test.cc",
         # "bluetooth_adapter_test.cc",
-        # "crypto_test.cc",
-        # "device_info_test.cc",
+        "crypto_test.cc",
         # "executor_test.cc",
-        # "file_path_test.cc",
-        # "http_loader_test.cc",
+        #        "file_path_test.cc",
+        #        "http_loader_test.cc",
         # "preferences_manager_test.cc",
         # "preferences_repository_test.cc",
-        # "scheduled_executor_test.cc",
-        # "submittable_executor_test.cc",
-        # "thread_pool_test.cc",
-        # "timer_test.cc",
+        #        "scheduled_executor_test.cc",
+        #        "submittable_executor_test.cc",
+        #        "thread_pool_test.cc",
+        "timer_test.cc",
     ],
     tags = ["notap"],
     deps = [
         ":comm",
         ":crypto",
         ":linux",
-        ":test_utils",
         ":types",
         "//internal/platform:base",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
         "//internal/platform/implementation:types",
         "//internal/platform/implementation/shared:count_down_latch",
-        "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",

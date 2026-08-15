@@ -1,6 +1,12 @@
-# Google Nearby Sharing & Connections for Linux (Unofficial)
+# Google Nearby for Linux
+> ## 🚧 **Under Construction** 🚧  
+> This repo is actively being worked on. Things are buggy, builds may fail, documentation is non-existent, and we test in prod.
+>
+> **You have been warned**
 
-<img width="982" height="760" alt="image" src="https://github.com/user-attachments/assets/9533ea09-81d9-4162-b90f-e0bd8b714d1d" />
+---
+
+<img width="600" height="464" alt="image" src="https://github.com/user-attachments/assets/9533ea09-81d9-4162-b90f-e0bd8b714d1d" />
 
 
 
@@ -17,7 +23,7 @@ This repo consists of the entirety of google's open source nearby library. Curre
 
     
 Linux specific implementation and compatibility shims are provided for building **Sharing** and **Connections**. 
-Nearby presence may or may not build. I haven't tested it.
+Nearby presence may or may not build.
 
 ## Why
 This repo could've been a PR on the official repo. All I've done is implement the platform abstraction layer google has provided for a linux specific environment.
@@ -41,12 +47,11 @@ As a consolation prize, I've indexed this project using [Deepwiki](https://deepw
 This repo provides prebuilt binaries of the Quick Share application and also builds cleanly from source on Ubuntu-family systems such as Pop!_OS 24.04.
 Fedora remains supported, and the release bundle now carries the `libsdbus-c++.so.2` runtime so it does not depend on a manual `/usr/local` install of `sdbus-c++`.
 
+>**NOTE: Previosly, the quickshare binary required the `sdbus-cpp` v2 library installed on the system. This is no longer the case and it is bundled with the shared library. Hopefully this expands compatibility**
 
-#### Prerequisites
-
-- `bluez`
+- `bluez` (>= 5.85 recommended)
 - `NetworkManager`
-- `Avahi`
+- `Avahi` / `systemd`
 - Qt 6 runtime libraries
 - `libqrencode`
 
@@ -94,20 +99,74 @@ That helper now installs the matching `libsdbus-c++.so.2` beside `libnearby_shar
 Source builds still need a compatible `sdbus-c++` development install discoverable via `pkg-config` (or installed under `/usr` or `/usr/local`) so Bazel can compile the Linux shared library.
 
 ### How to build
-Check the [wiki](https://github.com/kidfromjupiter/nearby/wiki/Development-Environment-and-Building)
+~Check the [wiki](https://github.com/kidfromjupiter/nearby/wiki/Development-Environment-and-Building)~
+
+Wiki isn't built yet. Best place to consult would be the Github actions and workflows. 
 ### How to contribute
-Check the [wiki](https://github.com/kidfromjupiter/nearby/wiki/Development-Environment-and-Building)
+~Check the [wiki](https://github.com/kidfromjupiter/nearby/wiki/Development-Environment-and-Building)~
 
 
 ## TODO
-- Investigate why bluetooth connection requests pairing ( both l2cap socket and bluetooth profile should be unauthenticated )
-- When transferring (android to linux) over bluetooth classic, android shows 100% transferred ( but still `Sending...` ) while linux lags behind. Some kind of bottleneck or android bug?
-- Tests for basically everything.
-- Cleanup of `implementation/linux`. Currently all the linux specific implementation files are in the same directory. Even though thats how the other platforms have their stuff structured, I personally hate the visual bloat.
-- Documentation basically everything ( honestly this would be a massive project in itself )
-- Resolving random crashes of quick share application
-- Support for fast initiation
-- When receiving, if file already exists, does not overwrite currently. Decide what to do then
+
+> **Development is paused until my next break (around mid-June.)**
+
+---
+
+### 🔴 P0 — Critical / Core Functionality
+
+> Issues that break core functionality. These should be addressed immediately.
+
+- **Merge latest upstream changes**
+  
+
+- **Bluetooth classic bandwidth**
+  
+    File transfer on bluetooth classic is painfully slow. Bandwidth close to 20KB/s. ~May be a regression issue after bluetooth socket refactor~. May be an issue with sending back acknowledgements. Issue is present on pre-refactor versions. ~Look into Multiplexing maybe~ Multiplexing did not fix it : (?
+- **~Linux → Android~ file sharing is unreliable** after the newest Android Quick Share updates.  
+  Investigate why and fix it. ~Possibly related to proprietary certificate changes~. Should probably add unit tests and integration tests for each medium. Everything is so fucking buggy it makes me wanna rip my fucking eyes out. Might be related to recent upstream changes. I could probably properly test linux -> linux bidirectional sharing. Will need to simulate a lot of hardware stuff though. Since there's no stable reference platform to write automatic tests against writing linux to linux tests could be like clown to clown communication
+  
+   <img width="200" height="143" alt="image" src="https://github.com/user-attachments/assets/caed18f3-1337-4499-ba4d-b49f549c0cf5" />
+
+
+
+- **QR code scanning does not work.**  
+  Likely related to the Linux → Android sharing issue above. I did get it working once in a very old build. So it shouldn't impossible. Unless google changed something 
+
+---
+
+### 🟠 P1 — Important Annoyances
+
+> Problems that are not fully blocking, but noticeably affect usability.
+
+- **Investigate why Bluetooth connection requests pairing.**  
+  Both the L2CAP socket and Bluetooth profile should be unauthenticated.
+- **Handle existing files when receiving.**  
+  Currently, files are not overwritten if they already exist. Decide whether to overwrite, rename, or skip.
+
+---
+
+### 🟡 P2 — Quality of Life / Cleanup
+
+> Improvements that would make the project cleaner, smoother, or easier to maintain.
+
+- **Bluetooth Classic transfer progress issue.**  
+  When transferring Android → Linux, Android shows 100% transferred but still says `Sending...`, while Linux lags behind. Could be a bottleneck or Android-side issue.
+- **Add tests for basically everything.**
+- **Clean up `implementation/linux`.**  
+  Linux-specific implementation files are currently all in one directory. This matches the other platforms, but creates visual bloat.
+- **Document basically everything.**  
+  This would be a large project on its own.
+- **Resolve random crashes in the Quick Share application.**
+
+---
+
+### 🔵 P3 — New Features
+
+> Non-essential features and future improvements.
+
+- **Support fast initiation.**
+- Upstream has been slowly adding webrtc support. Should we support it?
+
 
 ## Apologies
 I may have done things in *incredibly* stupid and overcomplicated ways. It doesn't certainly help that this was the way I decided to learn C++. Blessed be my naive soul. I also do not have much experience working with such 
