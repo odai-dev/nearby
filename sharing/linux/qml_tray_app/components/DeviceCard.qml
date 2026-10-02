@@ -242,6 +242,25 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
+            visible: isTransferFailed
+            text: {
+                if (transferStatus === "Rejected") return "Declined"
+                if (transferStatus === "Cancelled") return "Cancelled"
+                if (transferStatus === "TimedOut") return "Timed out"
+                return "Failed"
+            }
+            font.pixelSize: compact ? 11 : 12
+            font.weight: Font.SemiBold
+            color: "#ef4444"
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             visible: isTransferActive && !isConnecting && transferData && transferData.totalBytes > 0
             text: Math.floor(transferProgress * 100) + "%"
             font.pixelSize: compact ? 11 : 12
@@ -315,26 +334,53 @@ Item {
             onClicked: fileShareController.cancelTransfer(modelData.id)
         }
 
-        Button {
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: transferData && transferData.canRetry
-            text: "Retry"
-            flat: true
-            contentItem: Text {
-                text: parent.text
-                color: "#ffffff"
-                font.pixelSize: compact ? 10 : 11
-                font.weight: Font.Medium
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            spacing: 4
+            visible: isTransferFailed
+
+            Button {
+                visible: transferData && transferData.canRetry
+                text: "Retry"
+                flat: true
+                contentItem: Text {
+                    text: parent.text
+                    color: "#ffffff"
+                    font.pixelSize: compact ? 10 : 11
+                    font.weight: Font.Medium
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: compact ? 46 : 52
+                    implicitHeight: compact ? 24 : 26
+                    color: parent.pressed ? "#059669" : "#10b981"
+                    radius: 13
+                }
+                onClicked: fileShareController.retryTransfer(modelData.id)
             }
-            background: Rectangle {
-                implicitWidth: compact ? 58 : 64
-                implicitHeight: compact ? 26 : 28
-                color: parent.pressed ? "#059669" : "#10b981"
-                radius: 14
+
+            Button {
+                text: "Dismiss"
+                flat: true
+                contentItem: Text {
+                    text: parent.text
+                    color: "#d4d4d8"
+                    font.pixelSize: compact ? 10 : 11
+                    font.weight: Font.Medium
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: compact ? 46 : 52
+                    implicitHeight: compact ? 24 : 26
+                    color: parent.pressed ? "#3f3f46" : "#27272a"
+                    border.color: "#52525b"
+                    border.width: 1
+                    radius: 13
+                }
+                onClicked: fileShareController.dismissTransfer(modelData.id)
             }
-            onClicked: fileShareController.retryTransfer(modelData.id)
         }
     }
 

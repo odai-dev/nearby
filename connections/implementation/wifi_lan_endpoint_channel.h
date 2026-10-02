@@ -30,7 +30,6 @@ class WifiLanEndpointChannel final : public BaseEndpointChannel {
                          const std::string& channel_name, WifiLanSocket socket);
 
   location::nearby::proto::connections::Medium GetMedium() const override;
-  int GetMaxTransmitPacketSize() const override;
   bool EnableMultiplexSocket() override;
 
  private:

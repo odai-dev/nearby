@@ -139,6 +139,7 @@ class FileShareTrayController : public QObject {
   Q_INVOKABLE void copyTextToClipboard(const QString& text);
   Q_INVOKABLE void openFileLocation(const QString& file_path);
   Q_INVOKABLE void clearTransfers();
+  Q_INVOKABLE void dismissTransfer(qlonglong share_target_id);
   Q_INVOKABLE void hideToTray();
   Q_INVOKABLE void acceptTransfer(qlonglong share_target_id);
   Q_INVOKABLE void rejectTransfer(qlonglong share_target_id);

@@ -42,15 +42,6 @@ inline void ConfigureHighSpeedTcpSocket(int sock) {
   int nodelay = 1;
   setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
-#ifdef TCP_QUICKACK
-  int quickack = 1;
-  setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &quickack, sizeof(quickack));
-#endif
-
-  int buf_size = 4 * 1024 * 1024;  // 4MB buffer
-  setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size));
-  setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size));
-
   int keepalive = 1;
   setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
 }
@@ -199,7 +190,7 @@ class TCPServerSocket {
 
     ConfigureHighSpeedTcpSocket(conn);
 
-    return TCPSocket(sdbus::UnixFd(conn));
+    return TCPSocket(sdbus::UnixFd(conn, sdbus::adopt_fd));
   };
 
   Exception Close() {

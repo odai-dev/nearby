@@ -1753,6 +1753,11 @@ void FileShareTrayController::clearTransfers() {
   emit transfersChanged();
 }
 
+void FileShareTrayController::dismissTransfer(qlonglong share_target_id) {
+  state_.RemoveTransfer(share_target_id);
+  emit transfersChanged();
+}
+
 void FileShareTrayController::hideToTray() {
   // This is handled by the main window, but can be extended here if needed
 }

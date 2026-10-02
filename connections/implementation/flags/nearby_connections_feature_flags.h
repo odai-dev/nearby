@@ -97,7 +97,7 @@ constexpr auto kEnableWifiHotspotClient =
     flags::Flag<bool>(kConfigPackage, "45648734", true);
 // Default max transmit packet size for medium.
 constexpr auto kMediumDefaultMaxTransmitPacketSize =
-    flags::Flag<int64_t>(kConfigPackage, "45669529", 524288);
+    flags::Flag<int64_t>(kConfigPackage, "45669529", 65536);
 // Default max allowed read bytes for medium.
 constexpr auto kMediumMaxAllowedReadBytes =
     flags::Flag<int64_t>(kConfigPackage, "45669530", 8388608);

@@ -179,7 +179,7 @@ Exception OutputStream::Write(absl::string_view data) {
     }
 
     ssize_t ret =
-        send(fd, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
+        send(fd, data.data() + sent, data.size() - sent, MSG_NOSIGNAL | MSG_DONTWAIT);
     if (ret > 0) {
       sent += static_cast<size_t>(ret);
       continue;
