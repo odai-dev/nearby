@@ -26,7 +26,7 @@ namespace prefs {
 ABSL_CONST_INIT const proto::DeviceVisibility kDefaultVisibility =
     proto::DeviceVisibility::DEVICE_VISIBILITY_HIDDEN;
 ABSL_CONST_INIT const proto::DeviceVisibility kDefaultFallbackVisibility =
-    proto::DeviceVisibility::DEVICE_VISIBILITY_HIDDEN;
+    proto::DeviceVisibility::DEVICE_VISIBILITY_EVERYONE;
 ABSL_CONST_INIT const int kDefaultMaxVisibilityExpirationSeconds =
     600;  // 10 minutes
 

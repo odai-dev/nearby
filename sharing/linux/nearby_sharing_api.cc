@@ -471,19 +471,33 @@ void NearbySharingApi::StartSendMode(std::function<void(StatusCode)> callback) {
     }
     return;
   }
-  impl_->service->RegisterSendSurface(
-      impl_.get(), impl_.get(),
-      nearby::sharing::NearbySharingService::SendSurfaceState::kForeground,
-      nearby::sharing::Advertisement::BlockedVendorId::kNone,
-      /*disable_wifi_hotspot=*/false,
+  // Make the Linux device visible to everyone while in send mode so the phone
+  // can also discover us. Use an extended timeout to avoid becoming invisible
+  // mid-session.
+  impl_->service->SetVisibility(
+      nearby::sharing::proto::DeviceVisibility::DEVICE_VISIBILITY_EVERYONE,
+      absl::Hours(1),
       [this, cb = std::move(callback)](
-          nearby::sharing::NearbySharingService::StatusCodes status) mutable {
-        if (status == nearby::sharing::NearbySharingService::StatusCodes::kOk) {
-          impl_->send_mode_started = true;
-        }
-        if (cb) {
-          cb(ToFacadeStatus(status));
-        }
+          nearby::sharing::NearbySharingService::StatusCodes vis_status)
+          mutable {
+        // Proceed even if SetVisibility failed — scanning still works.
+        impl_->service->RegisterSendSurface(
+            impl_.get(), impl_.get(),
+            nearby::sharing::NearbySharingService::SendSurfaceState::
+                kForeground,
+            nearby::sharing::Advertisement::BlockedVendorId::kNone,
+            /*disable_wifi_hotspot=*/false,
+            [this, cb = std::move(cb)](
+                nearby::sharing::NearbySharingService::StatusCodes
+                    status) mutable {
+              if (status ==
+                  nearby::sharing::NearbySharingService::StatusCodes::kOk) {
+                impl_->send_mode_started = true;
+              }
+              if (cb) {
+                cb(ToFacadeStatus(status));
+              }
+            });
       });
 }
 
@@ -528,7 +542,7 @@ void NearbySharingApi::StartReceiveMode(std::function<void(StatusCode)> callback
   }
   impl_->service->SetVisibility(
       nearby::sharing::proto::DeviceVisibility::DEVICE_VISIBILITY_EVERYONE,
-      absl::Minutes(10),
+      absl::Hours(1),
       [this, cb = std::move(callback)](
           nearby::sharing::NearbySharingService::StatusCodes status) mutable {
         if (status != nearby::sharing::NearbySharingService::StatusCodes::kOk) {
