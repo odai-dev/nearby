@@ -1364,6 +1364,7 @@ void NearbySharingServiceImpl::AdapterPresentChanged(
   RunOnNearbySharingServiceThread("bt_adapter_present_changed", [this, adapter,
                                                                  present]() {
     VLOG(1) << "Bluetooth adapter present state changed. (" << present << ")";
+    fast_init_has_hardware_error_ = false;
     NearbySharingService::Observer::AdapterState state =
         MapAdapterState(present, adapter->IsPowered());
     service_observers_.NotifyBluetoothStatusChanged(state);
@@ -1381,6 +1382,7 @@ void NearbySharingServiceImpl::AdapterPoweredChanged(
       "bt_adapter_power_changed", absl::Milliseconds(500),
       [this, adapter, powered]() {
         VLOG(1) << "Bluetooth adapter power state changed. (" << powered << ")";
+        fast_init_has_hardware_error_ = false;
         NearbySharingService::Observer::AdapterState state =
             MapAdapterState(adapter->IsPresent(), powered);
         service_observers_.NotifyBluetoothStatusChanged(state);
@@ -1391,14 +1393,15 @@ void NearbySharingServiceImpl::AdapterPoweredChanged(
 void NearbySharingServiceImpl::HardwareErrorReported(
     NearbyFastInitiation* fast_init) {
   RunOnNearbySharingServiceThread("hardware_error_reported", [this]() {
-    VLOG(1) << "Hardware error reported, need to restart PC.";
+    LOG(WARNING) << "Hardware error reported by FastInitiation. Disabling FastInit advertising until adapter reset.";
+    fast_init_has_hardware_error_ = true;
     service_observers_.NotifyIrrecoverableHardwareErrorReported();
-    InvalidateSurfaceState();
   });
 }
 
 void NearbySharingServiceImpl::SetupBluetoothAdapter() {
   VLOG(1) << __func__ << ": Setup bluetooth adapter.";
+  fast_init_has_hardware_error_ = false;
   context_->GetBluetoothAdapter().AddObserver(this);
   InvalidateSurfaceState();
 }
@@ -1896,6 +1899,12 @@ void NearbySharingServiceImpl::InvalidateScanningState() {
 }
 
 void NearbySharingServiceImpl::InvalidateFastInitiationAdvertising() {
+  if (fast_init_has_hardware_error_) {
+    VLOG(1) << __func__
+            << ": Fast initiation has hardware error; skipping advertising.";
+    return;
+  }
+
   // Screen is off. Do no work.
   if (is_screen_locked_) {
     StopFastInitiationAdvertising();

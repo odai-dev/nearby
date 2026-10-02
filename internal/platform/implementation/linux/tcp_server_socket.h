@@ -57,22 +57,31 @@ inline void ConfigureHighSpeedTcpSocket(int sock) {
 
 class TCPSocket {
  public:
-  explicit TCPSocket(const sdbus::UnixFd& fd)
-      : closed_(false), output_stream_(fd), input_stream_(fd) {}
+  explicit TCPSocket(sdbus::UnixFd fd)
+      : closed_(false),
+        fd_(std::make_shared<sdbus::UnixFd>(std::move(fd))),
+        output_stream_(fd_),
+        input_stream_(fd_) {}
+
+  explicit TCPSocket(std::shared_ptr<sdbus::UnixFd> fd)
+      : closed_(false),
+        fd_(std::move(fd)),
+        output_stream_(fd_),
+        input_stream_(fd_) {}
 
   static std::optional<TCPSocket> Connect(const std::string& ip_address,
                                           int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
       LOG(ERROR) << __func__
-                         << ": Error opening socket: " << std::strerror(errno);
+                 << ": Error opening socket: " << std::strerror(errno);
       return std::nullopt;
     }
 
     ConfigureHighSpeedTcpSocket(sock);
 
     LOG(INFO) << __func__ << ": Connecting to " << ip_address << ":"
-                         << port;
+              << port;
     struct sockaddr_in addr;
     addr.sin_addr.s_addr = inet_addr(ip_address.c_str());
     addr.sin_family = AF_INET;
@@ -82,12 +91,12 @@ class TCPSocket {
         connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     if (ret < 0) {
       LOG(ERROR) << __func__ << ": Error connecting to socket: "
-                         << std::strerror(errno);
+                 << std::strerror(errno);
       close(sock);
       return std::nullopt;
     }
 
-    return TCPSocket(sdbus::UnixFd(sock));
+    return TCPSocket(sdbus::UnixFd(sock, sdbus::adopt_fd));
   }
 
   InputStream& GetInputStream() { return input_stream_; }
@@ -97,15 +106,19 @@ class TCPSocket {
     if (closed_) return {Exception::kSuccess};
 
     closed_ = true;
+    if (fd_ && fd_->isValid()) {
+      ::shutdown(fd_->get(), SHUT_RDWR);
+    }
     input_stream_.Close();
     output_stream_.Close();
+    fd_.reset();
 
     return {Exception::kSuccess};
-  };
+  }
 
  private:
   bool closed_;
-
+  std::shared_ptr<sdbus::UnixFd> fd_;
   OutputStream output_stream_;
   InputStream input_stream_;
 };

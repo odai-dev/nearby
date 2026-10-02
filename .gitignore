@@ -63,3 +63,5 @@ bazel-*
 /connections/walkietalkie/
 /third_party/
 dist
+.agents/
+ORIGINAL_REQUEST.md

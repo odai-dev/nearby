@@ -43,7 +43,7 @@ void AdvertisementMonitor::DeviceFound(const sdbus::ObjectPath &device) {
   devices_->cleanup_lost_peripherals();
   auto peripheral = devices_->add_new_device(device);
   auto service_data = peripheral->ServiceData();
-  if (!service_data.has_value()) return;
+  if (!service_data.has_value() || service_data->empty()) return;
 
   struct api::ble::BleAdvertisementData adv_data;
   for (const auto &[uuid_str, data] : *service_data) {
@@ -60,9 +60,25 @@ void AdvertisementMonitor::DeviceFound(const sdbus::ObjectPath &device) {
     adv_data.service_data.emplace(*uuid,
                                   std::string(bytes.begin(), bytes.end()));
   }
-  auto id = std::stoull(std::regex_replace(peripheral->GetMacAddress().ToString(),
-      std::regex("[:\\-]"), ""), nullptr, 16);
-  scan_callback_.advertisement_found_cb(id, adv_data);
+
+  if (adv_data.service_data.empty()) return;
+
+  std::string mac_str = std::regex_replace(
+      peripheral->GetMacAddress().ToString(), std::regex("[:\\-]"), "");
+  if (mac_str.empty()) return;
+
+  api::ble::BlePeripheral::UniqueId id = 0;
+  try {
+    id = std::stoull(mac_str, nullptr, 16);
+  } catch (const std::exception &e) {
+    LOG(ERROR) << __func__ << ": Failed to parse MAC address as unique id: '"
+               << mac_str << "': " << e.what();
+    return;
+  }
+
+  if (scan_callback_.advertisement_found_cb) {
+    scan_callback_.advertisement_found_cb(id, adv_data);
+  }
 }
 
 void AdvertisementMonitor::DeviceLost(const sdbus::ObjectPath &device) {

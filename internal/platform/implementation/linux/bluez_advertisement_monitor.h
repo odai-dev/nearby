@@ -49,19 +49,21 @@ class AdvertisementMonitor final
                        api::ble::BleMedium::ScanningCallback scan_callback);
   ~AdvertisementMonitor() { unregisterAdaptor(); }
 
- private:
   // Methods
   void Release() override {}
   void Activate() override {
-    LOG(INFO) <<__func__ << ": bluez advertisement monitor activated at path: "
+    LOG(INFO) << __func__ << ": bluez advertisement monitor activated at path: "
               << getObject().getObjectPath();
     if (start_scanning_result_callback_ != nullptr) {
       start_scanning_result_callback_(absl::OkStatus());
+      start_scanning_result_callback_ = nullptr;
     }
   }
 
   void DeviceFound(const sdbus::ObjectPath& device) override;
   void DeviceLost(const sdbus::ObjectPath& device) override;
+
+ private:
 
   // Properties
   std::string Type() override { return type_; };

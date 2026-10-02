@@ -1059,7 +1059,7 @@ class LinuxFastInitiationManager final
 
     const auto ad_data = beacon_.GetAdDataByteArray();
     nearby::api::ble::BleAdvertisementData advertising_data;
-    advertising_data.is_extended_advertisement = true;
+    advertising_data.is_extended_advertisement = false;
     advertising_data.service_data.insert(
         {*fast_init_uuid,
          nearby::ByteArray(reinterpret_cast<const char*>(ad_data.data() + 2),
@@ -1077,6 +1077,8 @@ class LinuxFastInitiationManager final
     try {
       adv_manager_->RegisterAdvertisementSync(advertisement_->getObject().getObjectPath(), {});
     } catch (const sdbus::Error& e) {
+      LOG(WARNING) << "LinuxFastInitiationManager: RegisterAdvertisementSync failed: "
+                   << e.getName() << ": " << e.getMessage();
       advertisement_.reset();
       if (error_callback) {
         if (e.getName() == "org.bluez.Error.AlreadyExists") {
@@ -1085,7 +1087,7 @@ class LinuxFastInitiationManager final
         } else if (e.getName() == "org.bluez.Error.NotPermitted") {
           error_callback(nearby::api::FastInitiationManager::Error::kDisabledByUser);
         } else {
-          error_callback(nearby::api::FastInitiationManager::Error::kUnknown);
+          error_callback(nearby::api::FastInitiationManager::Error::kHardwareNotSupported);
         }
       }
       return;

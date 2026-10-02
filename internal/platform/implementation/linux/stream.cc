@@ -118,10 +118,10 @@ ExceptionOr<ByteArray> InputStream::Read(std::int64_t size) {
 }
 
 Exception InputStream::Close() {
-  if (!fd_ || !fd_->isValid()) return Exception{Exception::kIo};
+  if (!fd_ || !fd_->isValid()) return {Exception::kSuccess};
   ::shutdown(fd_->get(), SHUT_RDWR);
   fd_.reset();
-  return {};
+  return {Exception::kSuccess};
 }
 
 Exception OutputStream::Write(absl::string_view data) {
@@ -205,13 +205,11 @@ Exception OutputStream::Write(absl::string_view data) {
 Exception OutputStream::Flush() { return Exception{Exception::kSuccess}; }
 
 Exception OutputStream::Close() {
-  if (!fd_ || !fd_->isValid()) return Exception{Exception::kIo};
+  if (!fd_ || !fd_->isValid()) return {Exception::kSuccess};
 
   ::shutdown(fd_->get(), SHUT_RDWR);
-  auto ret = close(fd_->get()) < 0 ? Exception{Exception::kIo}
-                                  : Exception{Exception::kSuccess};
   fd_.reset();
-  return ret;
+  return {Exception::kSuccess};
 }
 
 }  // namespace linux

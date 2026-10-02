@@ -25,8 +25,18 @@
 namespace nearby {
 namespace linux {
 std::optional<Uuid> UuidFromString(const std::string &uuid_str) {
+  std::string full_uuid_str = uuid_str;
+  if (full_uuid_str.rfind("0x", 0) == 0 || full_uuid_str.rfind("0X", 0) == 0) {
+    full_uuid_str = full_uuid_str.substr(2);
+  }
+  if (full_uuid_str.size() == 4) {
+    full_uuid_str = "0000" + full_uuid_str + "-0000-1000-8000-00805f9b34fb";
+  } else if (full_uuid_str.size() == 8) {
+    full_uuid_str = full_uuid_str + "-0000-1000-8000-00805f9b34fb";
+  }
+
   sd_id128_t uuid;
-  if (auto ret = sd_id128_from_string(uuid_str.c_str(), &uuid); ret < 0)
+  if (auto ret = sd_id128_from_string(full_uuid_str.c_str(), &uuid); ret < 0)
     return std::nullopt;
 
   const int ONE = 1;

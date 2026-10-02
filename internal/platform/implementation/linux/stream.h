@@ -15,7 +15,9 @@
 #ifndef PLATFORM_IMPL_LINUX_STREAM_H_
 #define PLATFORM_IMPL_LINUX_STREAM_H_
 
+#include <memory>
 #include <optional>
+#include <utility>
 
 #include <sdbus-c++/Types.h>
 
@@ -26,7 +28,9 @@ namespace nearby {
 namespace linux {
 class InputStream : public nearby::InputStream {
  public:
-  explicit InputStream(sdbus::UnixFd fd) : fd_(std::make_shared<sdbus::UnixFd>(fd)){};
+  explicit InputStream(std::shared_ptr<sdbus::UnixFd> fd) : fd_(std::move(fd)) {}
+  explicit InputStream(sdbus::UnixFd fd)
+      : fd_(std::make_shared<sdbus::UnixFd>(std::move(fd))) {}
 
   ExceptionOr<ByteArray> Read(std::int64_t size) override;
 
@@ -38,7 +42,9 @@ class InputStream : public nearby::InputStream {
 
 class OutputStream : public nearby::OutputStream {
  public:
-  explicit OutputStream(sdbus::UnixFd fd) : fd_(std::make_shared<sdbus::UnixFd>(fd)){};
+  explicit OutputStream(std::shared_ptr<sdbus::UnixFd> fd) : fd_(std::move(fd)) {}
+  explicit OutputStream(sdbus::UnixFd fd)
+      : fd_(std::make_shared<sdbus::UnixFd>(std::move(fd))) {}
 
   Exception Write(absl::string_view data) override;
   Exception Flush() override;
@@ -52,3 +58,4 @@ class OutputStream : public nearby::OutputStream {
 }  // namespace nearby
 
 #endif
+

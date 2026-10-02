@@ -441,6 +441,7 @@ class NearbySharingServiceImpl
   std::unique_ptr<NearbySharingServiceExtension> service_extension_;
   NearbyFileHandler file_handler_;
   bool is_screen_locked_ = false;
+  bool fast_init_has_hardware_error_ = false;
   std::unique_ptr<ThreadTimer> rotate_background_advertisement_timer_;
   std::unique_ptr<ThreadTimer> certificate_download_during_discovery_timer_;
 

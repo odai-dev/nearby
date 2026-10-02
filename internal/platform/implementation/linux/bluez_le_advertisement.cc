@@ -43,16 +43,15 @@ LEAdvertisement::LEAdvertisement(
     std::vector<uint8_t> data_bytes(data.size());
     const auto* bytes = data.data();
 
-    service_uuids_.push_back(uuid_string);
-    // service_uuids_.push_back("0000FE2C-0000-1000-8000-00805F9B34FB");
-    // service_uuids_.push_back("0000FE2C-0000-1000-8000-00805F9B34FB");
+    // Note: Do not add to service_uuids_ when already in service_data_.
+    // BlueZ includes the UUID in the Service Data field (type 0x16/0x21). Adding it
+    // to ServiceUUIDs duplicates the UUID in the packet (taking another 4 to 18 bytes),
+    // which causes legacy BLE advertisements to exceed the 31-byte limit and fail with
+    // "Advertising data too long or couldn't be generated".
     for (size_t i = 0; i < data.size(); i++) {
       data_bytes[i] = bytes[i];
     }
-    // LOG(INFO)<< __func__ << ": " << uuid_string;
-    // LOG(INFO)<< __func__ << ": " << BytesToHexString(data_bytes);
     service_data_.insert({uuid_string, std::move(sdbus::Variant(data_bytes))});
-    // service_data_.insert({"0000FE2C-0000-1000-8000-00805F9B34FB", std::move(data_bytes)});
   }
 
   registerAdaptor();

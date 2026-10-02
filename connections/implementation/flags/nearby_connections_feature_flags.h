@@ -88,7 +88,7 @@ constexpr auto kEnableScanningForInstantOnLost =
     flags::Flag<bool>(kConfigPackage, "45708613", true);
 // Stop BLE_V2 scanning when upgrading to WIFI Hotspot or WFD.
 constexpr auto kEnableStopBleScanningOnWifiUpgrade =
-    flags::Flag<bool>(kConfigPackage, "45687902", false);
+    flags::Flag<bool>(kConfigPackage, "45687902", true);
 // Enable/Disable Wi-Fi Direct in Nearby connections SDK.
 constexpr auto kEnableWifiDirect =
     flags::Flag<bool>(kConfigPackage, "45741157", false);
