@@ -20,6 +20,7 @@
 #include "absl/strings/string_view.h"
 #include "internal/platform/bluetooth_utils.h"
 #include "internal/platform/implementation/linux/bluetooth_classic_device.h"
+#include "internal/platform/implementation/linux/bluetooth_devices.h"
 #include "internal/platform/implementation/linux/bluez.h"
 #include "internal/platform/implementation/linux/bluez_device.h"
 #include "internal/platform/implementation/linux/dbus.h"
@@ -149,12 +150,14 @@ bool BluetoothDevice::ConnectToProfile(absl::string_view service_uuid) {
   MonitoredBluetoothDevice::MonitoredBluetoothDevice(
     std::shared_ptr<sdbus::IConnection> system_bus,
     std::shared_ptr<bluez::Device> device,
-    ObserverList<api::BluetoothClassicMedium::Observer> &observers)
+    ObserverList<api::BluetoothClassicMedium::Observer> &observers,
+    BluetoothDevices* owner)
     : BluetoothDevice(device),
       ProxyInterfaces<sdbus::Properties_proxy>(*system_bus,
                                                sdbus::ServiceName(bluez::SERVICE_DEST),
                                                device->getProxy().getObjectPath()),
       system_bus_(std::move(system_bus)),
+      owner_(owner),
       observers_(observers) {
   registerProxy();
 }
@@ -193,10 +196,16 @@ void MonitoredBluetoothDevice::onPropertiesChanged(
       }
     } else if ( it -> first == "ServicesResolved"){
       LOG(INFO) << ": ServicesResolved :" << it->second.get<std::string>();
-  }else if (it->first == bluez::DEVICE_NAME) {
+    } else if (it->first == bluez::DEVICE_NAME) {
       auto callback = GetDiscoveryCallback();
       if (callback != nullptr && callback->device_name_changed_cb != nullptr)
         callback->device_name_changed_cb(*this);
+    } else if (it->first == "ServiceData" || it->first == "ManufacturerData") {
+      LOG(INFO) << __func__ << ": " << getProxy().getObjectPath()
+                << " ServiceData/ManufacturerData updated.";
+      if (owner_ != nullptr) {
+        owner_->OnDeviceUpdated(getObjectPath());
+      }
     }
   }
 }

@@ -629,6 +629,61 @@ class FileShareTrayControllerTest : public QObject {
     QCOMPARE(controller->pendingSendFilePaths(), QStringList{file_path});
   }
 
+  void dropLocalFileUrlsPreparesFileSend() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString file_path1 = dir.filePath(QStringLiteral("test1.txt"));
+    const QString file_path2 = dir.filePath(QStringLiteral("test2.txt"));
+    QVERIFY(WriteTextFile(file_path1, "content 1"));
+    QVERIFY(WriteTextFile(file_path2, "content 2"));
+
+    auto controller = CreateController();
+    QVariantList urls;
+    urls.append(QUrl::fromLocalFile(file_path1));
+    urls.append(QUrl::fromLocalFile(file_path2));
+    urls.append(QUrl::fromLocalFile(file_path1)); // duplicate
+
+    controller->switchToSendModeWithUrls(urls);
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("files"));
+    QCOMPARE(controller->pendingSendFileCount(), 2);
+    QCOMPARE(controller->pendingSendFilePaths(), (QStringList{file_path1, file_path2}));
+  }
+
+  void dropHttpUrlPreparesLinkSend() {
+    auto controller = CreateController();
+    QVariantList urls;
+    urls.append(QUrl(QStringLiteral("https://nearby.google.com/test")));
+
+    controller->switchToSendModeWithUrls(urls);
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("link"));
+    QCOMPARE(controller->pendingSendText(), QStringLiteral("https://nearby.google.com/test"));
+  }
+
+  void dropTextPreparesTextSend() {
+    auto controller = CreateController();
+
+    controller->prepareDroppedText(QStringLiteral("Hello Nearby!"));
+
+    QCOMPARE(controller->pendingSendKind(), QStringLiteral("text"));
+    QCOMPARE(controller->pendingSendText(), QStringLiteral("Hello Nearby!"));
+  }
+
+  void dropInvalidOrEmptyUrlsHandledGracefully() {
+    auto controller = CreateController();
+    QSignalSpy tray_messages(
+        controller.get(), &FileShareTrayController::requestTrayMessage);
+
+    controller->switchToSendModeWithUrls({});
+
+    QCOMPARE(controller->statusMessage(),
+             QStringLiteral("Drop did not include shareable content"));
+    QCOMPARE(tray_messages.count(), 1);
+    QCOMPARE(tray_messages.first().at(0).toString(),
+             QStringLiteral("Send canceled"));
+  }
+
   void sendsPreparedTextAndLinkToTarget() {
     auto controller = CreateController();
     auto service = services_.back();

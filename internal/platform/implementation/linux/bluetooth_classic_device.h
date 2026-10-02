@@ -38,6 +38,7 @@
 
 namespace nearby {
 namespace linux {
+class BluetoothDevices;
 // https://developer.android.com/reference/android/bluetooth/BluetoothDevice.html.
 
 class BluetoothDevice : public api::BluetoothDevice {
@@ -66,7 +67,9 @@ class BluetoothDevice : public api::BluetoothDevice {
     try {
       return device->ServiceData();
     } catch (const sdbus::Error &e) {
-      DBUS_LOG_PROPERTY_GET_ERROR(device, "ServiceData", e);
+      if (e.getName() != "org.freedesktop.DBus.Error.InvalidArgs") {
+        DBUS_LOG_PROPERTY_GET_ERROR(device, "ServiceData", e);
+      }
       return std::nullopt;
     }
   }
@@ -151,7 +154,8 @@ class MonitoredBluetoothDevice final
   MonitoredBluetoothDevice(
       std::shared_ptr<sdbus::IConnection> system_bus,
       std::shared_ptr<bluez::Device> device,
-      ObserverList<api::BluetoothClassicMedium::Observer> &observers);
+      ObserverList<api::BluetoothClassicMedium::Observer> &observers,
+      BluetoothDevices* owner = nullptr);
   ~MonitoredBluetoothDevice() override { unregisterProxy(); }
 
   void SetDiscoveryCallback(
@@ -169,6 +173,7 @@ class MonitoredBluetoothDevice final
 
  private:
   std::shared_ptr<sdbus::IConnection> system_bus_;
+  BluetoothDevices* owner_ = nullptr;
   std::shared_ptr<api::BluetoothClassicMedium::DiscoveryCallback>
   GetDiscoveryCallback() ABSL_LOCKS_EXCLUDED(discovery_cb_mutex_) {
     discovery_cb_mutex_.ReaderLock();

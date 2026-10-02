@@ -37,6 +37,8 @@ namespace nearby {
 namespace linux {
 class BluetoothAdapter;
 
+using DeviceActionCallback = std::function<void(const sdbus::ObjectPath &)>;
+
 class BluetoothDevices final {
  public:
   BluetoothDevices(
@@ -62,6 +64,18 @@ class BluetoothDevices final {
       ABSL_LOCKS_EXCLUDED(devices_by_path_lock_);
   void cleanup_lost_peripherals() ABSL_LOCKS_EXCLUDED(devices_by_path_lock_);
 
+  void SetDeviceUpdatedCallback(DeviceActionCallback cb) {
+    absl::MutexLock l(&device_updated_cb_mutex_);
+    device_updated_cb_ = std::move(cb);
+  }
+
+  void OnDeviceUpdated(const sdbus::ObjectPath& path) {
+    absl::MutexLock l(&device_updated_cb_mutex_);
+    if (device_updated_cb_) {
+      device_updated_cb_(path);
+    }
+  }
+
     // DEBUG
     void dump_devices() ABSL_LOCKS_EXCLUDED(devices_by_path_lock_) {
       absl::ReaderMutexLock lock(&devices_by_path_lock_);
@@ -82,6 +96,9 @@ class BluetoothDevices final {
       devices_by_path_ ABSL_GUARDED_BY(devices_by_path_lock_);
   std::chrono::time_point<std::chrono::steady_clock> last_cleanup_
       ABSL_GUARDED_BY(devices_by_path_lock_);
+
+  absl::Mutex device_updated_cb_mutex_;
+  DeviceActionCallback device_updated_cb_ ABSL_GUARDED_BY(device_updated_cb_mutex_);
 };
 
 struct SharedBluetoothDevices {
@@ -116,16 +133,43 @@ class DeviceWatcher final : sdbus::ProxyInterfaces<sdbus::ObjectManager_proxy> {
         devices_(std::move(devices)),
         discovery_cb_(std::move(discovery_callback)),
         observers_(std::move(observers)) {
-    notifyExistingDevices();
-    registerProxy();
+    Start();
   }
   DeviceWatcher(sdbus::IConnection &system_bus,
                 const sdbus::ObjectPath &adapter_object_path,
                 BluetoothAdapter &adapter,
                 std::shared_ptr<BluetoothDevices> devices)
-      : DeviceWatcher(system_bus, adapter_object_path, adapter, std::move(devices),
-                      nullptr, nullptr) {}
+      : DeviceWatcher(
+            system_bus, adapter_object_path, adapter, std::move(devices),
+            std::unique_ptr<api::BluetoothClassicMedium::DiscoveryCallback>{},
+            std::shared_ptr<
+                ObserverList<api::BluetoothClassicMedium::Observer>>{}) {}
+  DeviceWatcher(
+      sdbus::IConnection &system_bus,
+      const sdbus::ObjectPath &adapter_object_path,
+      BluetoothAdapter &adapter,
+      std::shared_ptr<BluetoothDevices> devices,
+      DeviceActionCallback device_found_cb,
+      DeviceActionCallback device_lost_cb = nullptr)
+      : ProxyInterfaces(system_bus, sdbus::ServiceName("org.bluez"),
+                        sdbus::ObjectPath("/")),
+        adapter_object_path_(adapter_object_path),
+        adapter_(adapter),
+        devices_(std::move(devices)),
+        discovery_cb_(nullptr),
+        observers_(nullptr),
+        device_found_action_cb_(std::move(device_found_cb)),
+        device_lost_action_cb_(std::move(device_lost_cb)) {
+    Start();
+  }
   ~DeviceWatcher() { unregisterProxy(); }
+
+  void Start() {
+    if (started_) return;
+    started_ = true;
+    notifyExistingDevices();
+    registerProxy();
+  }
 
   void onInterfacesAdded(
       const sdbus::ObjectPath &objectPath,
@@ -139,12 +183,16 @@ class DeviceWatcher final : sdbus::ProxyInterfaces<sdbus::ObjectManager_proxy> {
  private:
   void notifyExistingDevices();
 
+  bool started_ = false;
+
   sdbus::ObjectPath adapter_object_path_;
   BluetoothAdapter &adapter_;
   std::shared_ptr<BluetoothDevices> devices_;
   std::shared_ptr<api::BluetoothClassicMedium::DiscoveryCallback> discovery_cb_;
   std::shared_ptr<ObserverList<api::BluetoothClassicMedium::Observer>>
       observers_;
+  DeviceActionCallback device_found_action_cb_;
+  DeviceActionCallback device_lost_action_cb_;
 };
 
 }  // namespace linux

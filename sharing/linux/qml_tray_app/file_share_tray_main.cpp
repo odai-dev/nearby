@@ -206,6 +206,20 @@ int main(int argc, char* argv[]) {
 
   FileShareTrayController controller;
 
+  QStringList initial_files;
+  for (int i = 1; i < app.arguments().size(); ++i) {
+    const QString arg = app.arguments().at(i);
+    if (!arg.startsWith(QLatin1Char('-'))) {
+      QFileInfo fi(arg);
+      if (fi.exists() && fi.isFile()) {
+        initial_files.append(fi.canonicalFilePath());
+      }
+    }
+  }
+  if (!initial_files.isEmpty()) {
+    controller.switchToSendModeWithFiles(initial_files);
+  }
+
   QQmlApplicationEngine engine;
   QObject::connect(&engine, &QQmlApplicationEngine::warnings, &engine,
                    [](const QList<QQmlError>& warnings) {

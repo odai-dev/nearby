@@ -17,6 +17,8 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include <sdbus-c++/Types.h>
 
@@ -137,7 +139,8 @@ std::shared_ptr<MonitoredBluetoothDevice> BluetoothDevices::add_new_device(
       std::make_shared<MonitoredBluetoothDevice>(
           system_bus_,
           std::make_shared<bluez::Device>(system_bus_, device_object_path),
-          observers_));
+          observers_,
+          this));
   if (!inserted) device_it->second->UnmarkLost();
   return device_it->second;
 }
@@ -167,6 +170,10 @@ void DeviceWatcher::onInterfacesAdded(
     for (const auto &observer : observers_->GetObservers()) {
       observer->DeviceAdded(*device);
     }
+  }
+
+  if (device_found_action_cb_) {
+    device_found_action_cb_(objectPath);
   }
 }
 
@@ -204,6 +211,10 @@ void DeviceWatcher::onInterfacesRemoved(
     } else {
       devices_->mark_peripheral_lost(objectPath);
     }
+
+    if (device_lost_action_cb_) {
+      device_lost_action_cb_(objectPath);
+    }
   }
 }
 
@@ -219,6 +230,8 @@ void DeviceWatcher::notifyExistingDevices() {
   }
 
   std::vector<sdbus::ObjectPath> existing_device_paths;
+  std::vector<std::shared_ptr<MonitoredBluetoothDevice>> skipped_devices;
+  std::vector<sdbus::ObjectPath> skipped_device_paths;
 
   for (const auto& [device_path, interfaces] : objects) {
     if (device_path.find(absl::Substitute("$0/dev_", adapter_object_path_)) == 0 &&
@@ -254,8 +267,40 @@ void DeviceWatcher::notifyExistingDevices() {
       
       if (!should_skip) {
         existing_device_paths.push_back(device_path);
+      } else {
+        // Bonded/paired/connected/trusted devices should not be deleted from BlueZ,
+        // but must still be registered in devices_ and reported to discovery listeners.
+        auto device = devices_->add_new_device(device_path);
+        if (discovery_cb_ != nullptr) {
+          device->SetDiscoveryCallback(discovery_cb_);
+        }
+        skipped_devices.push_back(std::move(device));
+        skipped_device_paths.push_back(device_path);
       }
     }
+  }
+
+  if (!skipped_devices.empty()) {
+    std::thread([skipped_devices = std::move(skipped_devices),
+                 skipped_device_paths = std::move(skipped_device_paths),
+                 discovery_cb = discovery_cb_, observers = observers_,
+                 device_found_cb = device_found_action_cb_]() {
+      for (size_t i = 0; i < skipped_devices.size(); ++i) {
+        const auto& device = skipped_devices[i];
+        if (discovery_cb != nullptr &&
+            discovery_cb->device_discovered_cb != nullptr) {
+          discovery_cb->device_discovered_cb(*device);
+        }
+        if (observers != nullptr) {
+          for (const auto &observer : observers->GetObservers()) {
+            observer->DeviceAdded(*device);
+          }
+        }
+        if (device_found_cb) {
+          device_found_cb(skipped_device_paths[i]);
+        }
+      }
+    }).detach();
   }
 
   // Remove existing devices - they will be immediately re-discovered

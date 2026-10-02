@@ -310,15 +310,16 @@ QStringList FileShareTrayController::localPathsFromUrlValues(
 
     QString path;
     if (url.isLocalFile()) {
-      path = url.toLocalFile();
+      path = url.toLocalFile().trimmed();
     } else if (url.scheme().isEmpty()) {
-      path = value.toString();
+      path = value.toString().trimmed();
     }
 
     if (!path.isEmpty()) {
       paths.append(path);
     }
   }
+  paths.removeDuplicates();
   return paths;
 }
 
@@ -1379,7 +1380,17 @@ void FileShareTrayController::switchToSendModeWithUrls(
     return;
   }
   for (const QVariant& value : urls) {
-    const QString text = value.toString().trimmed();
+    QString text;
+    if (value.canConvert<QUrl>()) {
+      const QUrl url = value.toUrl();
+      if (url.isValid() && (url.scheme() == QStringLiteral("http") ||
+                            url.scheme() == QStringLiteral("https"))) {
+        text = url.toString().trimmed();
+      }
+    }
+    if (text.isEmpty()) {
+      text = value.toString().trimmed();
+    }
     if (isHttpOrHttpsUrl(text)) {
       switchToSendModeWithLink(text);
       return;

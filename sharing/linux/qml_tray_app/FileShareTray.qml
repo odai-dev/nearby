@@ -30,7 +30,7 @@ ApplicationWindow {
     background: Rectangle { color: "#09090b" }
 
     Shortcut {
-        sequence: StandardKey.Paste
+        sequences: [StandardKey.Paste]
         onActivated: fileShareController.prepareSendFromClipboard()
     }
 
@@ -230,14 +230,14 @@ ApplicationWindow {
                     anchors.fill: parent
                     onEntered: (drag) => {
                         if (drag.hasUrls || drag.hasText) {
-                            drag.accept(Qt.LinkAction)
+                            drag.accept()
                         }
                     }
                     onDropped: (drop) => {
-                        if (drop.hasUrls) {
+                        if (drop.hasUrls && drop.urls && drop.urls.length > 0) {
                             fileShareController.switchToSendModeWithUrls(drop.urls)
                             drop.accept()
-                        } else if (drop.hasText) {
+                        } else if (drop.hasText && drop.text && drop.text.length > 0) {
                             fileShareController.prepareDroppedText(drop.text)
                             drop.accept()
                         }

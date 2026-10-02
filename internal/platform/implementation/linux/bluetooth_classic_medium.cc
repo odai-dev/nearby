@@ -70,6 +70,7 @@ bool BluetoothClassicMedium::StartDiscovery(
       *system_bus_, adapter_.GetObjectPath(), adapter_, devices_,
       std::make_unique<DiscoveryCallback>(std::move(discovery_callback)),
       observers_);
+  device_watcher_->Start();
 
   std::map<std::string, sdbus::Variant> filter;
   filter["Transport"] = sdbus::Variant("auto");
